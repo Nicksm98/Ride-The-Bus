@@ -57,6 +57,7 @@ export default function PregameClient({ code }: { code: string }) {
         "postgres_changes",
         { event: "UPDATE", schema: "public", table: "lobbies", filter: `code=eq.${codeUpper}` },
         (payload) => {
+          console.log('Realtime update received:', payload);
           try {
             setPlayers(payload.new.players || []);
             // Auto-redirect all players when game starts
@@ -68,10 +69,33 @@ export default function PregameClient({ code }: { code: string }) {
           }
         }
       )
-      .subscribe();
+      .subscribe((status) => {
+        console.log('Realtime subscription status:', status);
+      });
+
+    // Polling fallback in case realtime doesn't work
+    const pollInterval = setInterval(async () => {
+      try {
+        const { data, error } = await supabase
+          .from("lobbies")
+          .select("players, status")
+          .eq("code", codeUpper)
+          .maybeSingle();
+        
+        if (!error && data && mounted) {
+          setPlayers(data.players || []);
+          if (data.status === 'in-progress') {
+            router.push(`/lobby/${encodeURIComponent(code)}?playerId=${encodeURIComponent(currentPlayerId || '')}`);
+          }
+        }
+      } catch (err) {
+        console.error('Polling error:', err);
+      }
+    }, 2000); // Poll every 2 seconds
 
     return () => {
       mounted = false;
+      clearInterval(pollInterval);
       try {
         // removeChannel is the API to unsubscribe for the current supabase client
         supabase.removeChannel(channel);
