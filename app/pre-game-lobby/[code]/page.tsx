@@ -6,15 +6,11 @@
 import PregameClient from './PregameClient';
 
 type Props = {
-  // In new Next.js versions `params` can 
-  // be a Promise. Accept either a
-  // plain params object or a Promise that resolves to it.
-  params: Promise<{ code?: string }> | { code?: string };
+  params: Promise<{ code: string }>;
 };
 
 export default async function LobbyPage({ params }: Props) {
-  const resolved = await params;
-  const code = String(resolved?.code || "").toUpperCase();
+  const { code } = await params;
 
-  return <PregameClient code={code} />;
+  return <PregameClient code={code.toUpperCase()} />;
 }
