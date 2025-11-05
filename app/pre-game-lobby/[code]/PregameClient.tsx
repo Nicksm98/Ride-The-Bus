@@ -32,13 +32,17 @@ export default function PregameClient({ code }: { code: string }) {
       try {
         const { data, error } = await supabase
           .from("lobbies")
-          .select("players")
+          .select("players, status")
           .eq("code", codeUpper)
           .maybeSingle();
         if (error) {
           console.error("Failed to fetch lobby", error);
         } else if (mounted && data) {
           setPlayers(data.players || []);
+          // If game already started, redirect immediately
+          if (data.status === 'in-progress') {
+            router.push(`/lobby/${encodeURIComponent(code)}?playerId=${encodeURIComponent(currentPlayerId || '')}`);
+          }
         }
       } catch (err) {
         console.error(err);
@@ -55,6 +59,10 @@ export default function PregameClient({ code }: { code: string }) {
         (payload) => {
           try {
             setPlayers(payload.new.players || []);
+            // Auto-redirect all players when game starts
+            if (payload.new.status === 'in-progress') {
+              router.push(`/lobby/${encodeURIComponent(code)}?playerId=${encodeURIComponent(currentPlayerId || '')}`);
+            }
           } catch (e) {
             console.error("Failed to update players from realtime payload", e);
           }
@@ -71,7 +79,7 @@ export default function PregameClient({ code }: { code: string }) {
         // ignore
       }
     };
-  }, [code]);
+  }, [code, router, currentPlayerId]);
 
   // Add a bot player for testing
   const addBot = async () => {
@@ -244,12 +252,31 @@ export default function PregameClient({ code }: { code: string }) {
             </button>
             <button
               className="px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600 transition-colors disabled:bg-gray-500 disabled:cursor-not-allowed"
-              onClick={() => {
+              onClick={async () => {
                 if (players.length < 2) {
                   alert("Need at least 2 players to start");
                   return;
                 }
-                router.push(`/lobby/${encodeURIComponent(code)}?playerId=${encodeURIComponent(currentPlayerId || '')}`);
+                
+                // Update lobby status to start the game for everyone
+                try {
+                  const { error } = await supabase
+                    .from('lobbies')
+                    .update({ status: 'in-progress' })
+                    .eq('code', code.toUpperCase());
+                  
+                  if (error) {
+                    console.error('Failed to start game:', error);
+                    alert('Failed to start game');
+                    return;
+                  }
+                  
+                  // Navigate host immediately (others will be redirected via realtime)
+                  router.push(`/lobby/${encodeURIComponent(code)}?playerId=${encodeURIComponent(currentPlayerId || '')}`);
+                } catch (err) {
+                  console.error('Failed to start game:', err);
+                  alert('Failed to start game');
+                }
               }}
               disabled={players.length < 2}
             >

@@ -694,6 +694,7 @@ function GamePhaseView({
   if (gameState.phase === 'round3_busdriver') {
     return <Round3View 
       gameState={gameState}
+      currentPlayerId={currentPlayerId}
       onGuessSuit={onRound3GuessSuit}
       onGuessHigherLowerSame={onRound3GuessHigherLowerSame}
       onDrinksPenalty={() => {}}
@@ -827,7 +828,7 @@ function GuessButtons({ cardIndex, onGuess }: { cardIndex: number; onGuess: (gue
 // Round 2: Good/Bad/Ugly
 function Round2View({ 
   gameState, 
-  currentPlayerId: _currentPlayerId,
+  currentPlayerId,
   onDrawCard,
   onSelectPlayer,
   deckCardsRemaining
@@ -1016,6 +1017,7 @@ function Round2View({
                     const playersWithUglyMatch = playersWithMatch;
                     const firstUnprocessedPlayer = playersWithUglyMatch.find(p => !uglyCardsGiven.has(p.id));
                     const isMyTurn = firstUnprocessedPlayer?.id === player.id;
+                    const isMyHand = player.id === currentPlayerId;
                     
                     if (!isMyTurn) {
                       // Show waiting indicator for players who have already given or aren't next
@@ -1033,6 +1035,15 @@ function Round2View({
                         );
                       }
                     }
+                    
+                    // Only show button if this is my hand
+                    if (!isMyHand) {
+                      return (
+                        <div className="mt-1 text-yellow-400 text-xs text-center">
+                          {player.name}&apos;s Turn
+                        </div>
+                      );
+                    }
                   }
                   
                   // For good cards, only show button for the first player who hasn't given yet
@@ -1040,6 +1051,7 @@ function Round2View({
                     const playersWithGoodMatch = playersWithMatch;
                     const firstUnprocessedPlayer = playersWithGoodMatch.find(p => !goodCardsGiven.has(p.id));
                     const isMyTurn = firstUnprocessedPlayer?.id === player.id;
+                    const isMyHand = player.id === currentPlayerId;
                     
                     if (!isMyTurn) {
                       // Show waiting indicator for players who have already given or aren't next
@@ -1056,6 +1068,15 @@ function Round2View({
                           </div>
                         );
                       }
+                    }
+                    
+                    // Only show button if this is my hand
+                    if (!isMyHand) {
+                      return (
+                        <div className="mt-1 text-yellow-400 text-xs text-center">
+                          {player.name}&apos;s Turn
+                        </div>
+                      );
                     }
                   }
                   
@@ -1135,12 +1156,14 @@ function Round2View({
 // Round 3: Bus Driver
 function Round3View({ 
   gameState,
+  currentPlayerId,
   onGuessSuit,
   onGuessHigherLowerSame,
   onDrinksPenalty: _onDrinksPenalty,
   deckCardsRemaining
 }: { 
   gameState: GameState;
+  currentPlayerId: string | null;
   onGuessSuit: (suit: Card['suit']) => void;
   onGuessHigherLowerSame: (guess: 'higher' | 'lower' | 'same') => void;
   onDrinksPenalty: () => void;
@@ -1149,6 +1172,7 @@ function Round3View({
   const [showDrinkDistribution, setShowDrinkDistribution] = React.useState(false);
 
   const busDriver = gameState.players.find(p => p.id === gameState.busDriverId);
+  const isBusDriver = gameState.busDriverId === currentPlayerId;
   
   // Get all players except the bus driver
   const otherPlayers = gameState.players.filter(p => p.id !== gameState.busDriverId);
@@ -1227,20 +1251,24 @@ function Round3View({
           <p className="text-white/70 text-xs mb-3">
             Correct: Give 2 drinks | Wrong: Drink once
           </p>
-          <div className="grid grid-cols-2 gap-2">
-            <Button onClick={() => onGuessSuit('hearts')} size="sm" className="bg-red-600 text-white text-xs py-1">
-              ♥ Hearts
-            </Button>
-            <Button onClick={() => onGuessSuit('diamonds')} size="sm" className="bg-red-600 text-white text-xs py-1">
-              ♦ Diamonds
-            </Button>
-            <Button onClick={() => onGuessSuit('clubs')} size="sm" className="bg-gray-900 text-white text-xs py-1">
-              ♣ Clubs
-            </Button>
-            <Button onClick={() => onGuessSuit('spades')} size="sm" className="bg-gray-900 text-white text-xs py-1">
-              ♠ Spades
-            </Button>
-          </div>
+          {isBusDriver ? (
+            <div className="grid grid-cols-2 gap-2">
+              <Button onClick={() => onGuessSuit('hearts')} size="sm" className="bg-red-600 text-white text-xs py-1">
+                ♥ Hearts
+              </Button>
+              <Button onClick={() => onGuessSuit('diamonds')} size="sm" className="bg-red-600 text-white text-xs py-1">
+                ♦ Diamonds
+              </Button>
+              <Button onClick={() => onGuessSuit('clubs')} size="sm" className="bg-gray-900 text-white text-xs py-1">
+                ♣ Clubs
+              </Button>
+              <Button onClick={() => onGuessSuit('spades')} size="sm" className="bg-gray-900 text-white text-xs py-1">
+                ♠ Spades
+              </Button>
+            </div>
+          ) : (
+            <p className="text-yellow-400 text-sm">Waiting for {busDriver?.name} to guess...</p>
+          )}
         </div>
       )}
 
@@ -1272,17 +1300,21 @@ function Round3View({
           <p className="text-white/70 text-xs mb-3">
             Current: {gameState.busDriverCards[gameState.busDriverCards.length - 1].rank.toUpperCase()}
           </p>
-          <div className="flex gap-2 justify-center">
-            <Button onClick={() => onGuessHigherLowerSame('higher')} size="sm" className="bg-green-600 text-xs py-1">
-              ⬆️ Higher
-            </Button>
-            <Button onClick={() => onGuessHigherLowerSame('same')} size="sm" className="bg-yellow-600 text-xs py-1">
-              = Same
-            </Button>
-            <Button onClick={() => onGuessHigherLowerSame('lower')} size="sm" className="bg-blue-600 text-xs py-1">
-              ⬇️ Lower
-            </Button>
-          </div>
+          {isBusDriver ? (
+            <div className="flex gap-2 justify-center">
+              <Button onClick={() => onGuessHigherLowerSame('higher')} size="sm" className="bg-green-600 text-xs py-1">
+                ⬆️ Higher
+              </Button>
+              <Button onClick={() => onGuessHigherLowerSame('same')} size="sm" className="bg-yellow-600 text-xs py-1">
+                = Same
+              </Button>
+              <Button onClick={() => onGuessHigherLowerSame('lower')} size="sm" className="bg-blue-600 text-xs py-1">
+                ⬇️ Lower
+              </Button>
+            </div>
+          ) : (
+            <p className="text-yellow-400 text-sm">Waiting for {busDriver?.name} to guess...</p>
+          )}
         </div>
       )}
 
