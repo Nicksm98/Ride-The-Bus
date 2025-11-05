@@ -17,7 +17,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ code: s
       return NextResponse.json({ error: 'Can only remove bot players' }, { status: 400 });
     }
 
-    const supabase = await getSupabaseAdmin();
+    const supabase = getSupabaseAdmin();
 
     // Fetch the lobby
     const { data: lobby, error: fetchError } = await supabase
