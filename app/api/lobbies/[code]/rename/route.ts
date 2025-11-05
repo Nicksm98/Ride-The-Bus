@@ -1,9 +1,10 @@
 import { NextResponse } from 'next/server';
 import { getSupabaseAdmin } from '@/lib/supabase/server';
 
-export async function POST(req: Request, { params }: { params: { code: string } }) {
+export async function POST(req: Request, { params }: { params: Promise<{ code: string }> }) {
   try {
-    const code = String(params.code || '').toUpperCase();
+    const { code: rawCode } = await params;
+    const code = String(rawCode || '').toUpperCase();
     const body = await req.json();
     const playerId = String(body.playerId || '');
     const name = String(body.name || '').trim();
@@ -14,18 +15,48 @@ export async function POST(req: Request, { params }: { params: { code: string } 
 
     const supabase = getSupabaseAdmin();
 
-    const { data, error } = await supabase.rpc('update_player_name', {
-      p_code: code,
-      p_player_id: playerId,
-      p_name: name,
-    });
+    // Get the current lobby
+    const { data: lobby, error: fetchError } = await supabase
+      .from('lobbies')
+      .select('players')
+      .eq('code', code)
+      .single();
 
-    if (error) {
-      console.error('RPC update_player_name error', error);
-      return NextResponse.json({ error: error.message || String(error) }, { status: 500 });
+    if (fetchError || !lobby) {
+      console.error('Lobby fetch error', fetchError);
+      return NextResponse.json({ error: 'Lobby not found' }, { status: 404 });
     }
 
-    return NextResponse.json({ players: data?.[0]?.players ?? data ?? null });
+    const currentPlayers = lobby.players || [];
+
+    if (currentPlayers.length === 0) {
+      return NextResponse.json({ error: 'Lobby has no players' }, { status: 400 });
+    }
+
+    // Find and update the player
+    const playerIndex = currentPlayers.findIndex((p: { id: string }) => p.id === playerId);
+    
+    if (playerIndex === -1) {
+      return NextResponse.json({ error: 'Player not found in lobby' }, { status: 404 });
+    }
+
+    // Update the player's name
+    const updatedPlayers = currentPlayers.map((p: { id: string; name: string }) => 
+      p.id === playerId ? { ...p, name } : p
+    );
+
+    // Save back to database
+    const { error: updateError } = await supabase
+      .from('lobbies')
+      .update({ players: updatedPlayers })
+      .eq('code', code);
+
+    if (updateError) {
+      console.error('Failed to update lobby', updateError);
+      return NextResponse.json({ error: updateError.message }, { status: 500 });
+    }
+
+    return NextResponse.json({ players: updatedPlayers });
   } catch (err) {
     console.error(err);
     return NextResponse.json({ error: String(err) }, { status: 500 });

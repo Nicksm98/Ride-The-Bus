@@ -180,16 +180,44 @@ export default function PregameClient({ code }: { code: string }) {
                       </div>
                     ) : (
                       <>
-                        <span>{p.name}</span>
+                        <span className="flex-1">{p.name}</span>
                         {p.id === currentPlayerId && (
                           <button
-                            className="ml-3 px-2 py-1 bg-yellow-500 rounded text-black"
+                            className="ml-3 px-2 py-1 bg-yellow-500 rounded text-black text-sm"
                             onClick={() => {
                               setEditingId(p.id);
                               setEditingName(p.name);
                             }}
                           >
                             Edit
+                          </button>
+                        )}
+                        {isBot && (
+                          <button
+                            className="ml-2 px-2 py-1 bg-red-500 rounded text-white text-sm hover:bg-red-600"
+                            onClick={async () => {
+                              try {
+                                const res = await fetch(`/api/lobbies/${encodeURIComponent(code)}/remove-bot`, {
+                                  method: 'POST',
+                                  headers: { 'Content-Type': 'application/json' },
+                                  body: JSON.stringify({ botId: p.id }),
+                                });
+
+                                if (!res.ok) {
+                                  const body = await res.json();
+                                  alert(body.error || 'Failed to remove bot');
+                                  return;
+                                }
+
+                                const data = await res.json();
+                                setPlayers(data.players || []);
+                              } catch (err) {
+                                console.error('Failed to remove bot:', err);
+                                alert('Failed to remove bot');
+                              }
+                            }}
+                          >
+                            ✕
                           </button>
                         )}
                       </>
