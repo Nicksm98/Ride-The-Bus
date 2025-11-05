@@ -12,7 +12,9 @@ export async function POST(req: Request) {
     try {
       supabase = getSupabaseAdmin();
     } catch (err) {
-      return NextResponse.json({ error: String(err) }, { status: 500 });
+      const errorMessage = err instanceof Error ? err.message : String(err);
+      console.error('Supabase initialization error:', errorMessage);
+      return NextResponse.json({ error: errorMessage }, { status: 500 });
     }
 
     let code: string | undefined;
