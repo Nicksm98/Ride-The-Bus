@@ -1,9 +1,10 @@
 import { NextResponse } from 'next/server';
 import { getSupabaseAdmin } from '@/lib/supabase/server';
 
-export async function POST(req: Request, { params }: { params: { code: string } }) {
+export async function POST(req: Request, { params }: { params: Promise<{ code: string }> }) {
   try {
-    const code = String(params.code || '').toUpperCase();
+    const { code: rawCode } = await params;
+    const code = String(rawCode || '').toUpperCase();
 
     const supabase = getSupabaseAdmin();
 

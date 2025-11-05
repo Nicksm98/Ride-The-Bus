@@ -1,8 +1,9 @@
 import { NextResponse } from 'next/server';
 import { getSupabaseAdmin } from '@/lib/supabase/server';
 
-export async function POST(req: Request, { params }: { params: { code: string } }) {
-  const code = params.code?.toUpperCase();
+export async function POST(req: Request, { params }: { params: Promise<{ code: string }> }) {
+  const { code: rawCode } = await params;
+  const code = rawCode?.toUpperCase();
   try {
     const body = await req.json();
     const name = (body?.name as string) || 'Anon';

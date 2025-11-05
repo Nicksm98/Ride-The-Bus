@@ -3,10 +3,10 @@ import { getSupabaseAdmin } from '@/lib/supabase/server';
 
 export async function POST(
   req: Request, 
-  { params }: { params: { code: string; deckId: string } }
+  { params }: { params: Promise<{ code: string; deckId: string }> }
 ) {
   try {
-    const { deckId } = params;
+    const { deckId } = await params;
 
     const supabase = getSupabaseAdmin();
 
