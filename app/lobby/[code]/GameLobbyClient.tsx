@@ -1379,10 +1379,11 @@ function Round3View({
 
   // Clear partner suggestion when new card is drawn
   React.useEffect(() => {
-    if (partnerSuggestion) {
+    if (partnerSuggestion && gameState.busDriverCards.length > 0) {
+      // Only clear if we actually have cards (prevents clearing on mount)
       onSetPartnerSuggestion(null);
     }
-  }, [gameState.busDriverCards.length, partnerSuggestion, onSetPartnerSuggestion]);
+  }, [gameState.busDriverCards.length]);
 
   return (
     <div className="flex flex-col items-center justify-between h-full py-2 relative">
