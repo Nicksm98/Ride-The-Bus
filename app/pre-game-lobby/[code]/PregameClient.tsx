@@ -74,6 +74,7 @@ export default function PregameClient({ code }: { code: string }) {
       });
 
     // Polling fallback in case realtime doesn't work
+    console.log('Setting up polling for lobby:', codeUpper, 'Current player:', currentPlayerId);
     const pollInterval = setInterval(async () => {
       try {
         const { data, error } = await supabase
@@ -82,16 +83,25 @@ export default function PregameClient({ code }: { code: string }) {
           .eq("code", codeUpper)
           .maybeSingle();
         
-        if (!error && data && mounted) {
-          console.log('Poll update - players:', data.players?.length, 'status:', data.status);
-          setPlayers(data.players || []);
+        if (error) {
+          console.error('Polling error:', error);
+        } else if (data && mounted) {
+          const playerCount = data.players?.length || 0;
+          console.log(`[${new Date().toLocaleTimeString()}] Poll - players: ${playerCount}, status: ${data.status}`);
+          
+          // Update players if count changed
+          if (playerCount !== players.length) {
+            console.log('Player count changed! Updating from', players.length, 'to', playerCount);
+            setPlayers(data.players || []);
+          }
+          
           if (data.status === 'in-progress') {
             console.log('Game started! Redirecting to game lobby...');
             router.push(`/lobby/${encodeURIComponent(code)}?playerId=${encodeURIComponent(currentPlayerId || '')}`);
           }
         }
       } catch (err) {
-        console.error('Polling error:', err);
+        console.error('Polling exception:', err);
       }
     }, 1000); // Poll every 1 second for faster response
 
@@ -105,6 +115,7 @@ export default function PregameClient({ code }: { code: string }) {
         // ignore
       }
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [code, router, currentPlayerId]);
 
   // Add a bot player for testing
@@ -141,7 +152,10 @@ export default function PregameClient({ code }: { code: string }) {
         <h1 className="text-white mb-8 text-4xl">Lobby {code}</h1>
         <div className="bg-white/10 p-8 rounded-lg backdrop-blur-sm w-full max-w-lg">
           <div className="text-white mb-4">
-            <h2 className="text-xl mb-2">Players</h2>
+            <div className="flex items-center justify-between mb-2">
+              <h2 className="text-xl">Players</h2>
+              <div className="text-xs text-green-400">● Live</div>
+            </div>
             {loading ? (
               <div className="text-sm text-gray-300">Loading players…</div>
             ) : players.length === 0 ? (
