@@ -1441,7 +1441,7 @@ function Round3View({
           <p className="text-white/70 text-xs mb-3">
             Correct: Give 2 drinks | Wrong: Drink once
           </p>
-          {isBusDriver ? (
+          {currentPlayerId === gameState.players[0]?.id ? (
             <div className="grid grid-cols-2 gap-2">
               <Button onClick={() => onGuessSuit('hearts')} size="sm" className="bg-red-600 text-white text-xs py-1">
                 ♥ Hearts
@@ -1457,7 +1457,7 @@ function Round3View({
               </Button>
             </div>
           ) : (
-            <p className="text-yellow-400 text-sm">Waiting for {busDriver?.name} to guess...</p>
+            <p className="text-yellow-400 text-sm">Waiting for host to guess...</p>
           )}
         </div>
       )}
