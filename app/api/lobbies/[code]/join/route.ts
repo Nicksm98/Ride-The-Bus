@@ -22,8 +22,9 @@ export async function POST(req: Request, { params }: { params: Promise<{ code: s
     const row = Array.isArray(data) ? data[0] : data;
     if (!row) return NextResponse.json({ error: 'Unexpected RPC result' }, { status: 500 });
 
-    // row contains player_id and players (jsonb)
-    return NextResponse.json({ id: row.player_id || row.player_id, players: row.players || row.players });
+    // row contains player_id and all_players (jsonb)
+    console.log('Join successful - player_id:', row.player_id, 'players:', row.all_players?.length);
+    return NextResponse.json({ id: row.player_id, players: row.all_players });
   } catch (err) {
     return NextResponse.json({ error: String(err) }, { status: 500 });
   }
