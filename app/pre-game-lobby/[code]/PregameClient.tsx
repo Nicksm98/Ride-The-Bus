@@ -9,9 +9,13 @@ type Player = { id: string; name: string };
 const MAX_NAME_LENGTH = 20;
 
 export default function PregameClient({ code }: { code: string }) {
+  console.log('🎮 PregameClient MOUNTED - code:', code);
+  
   const router = useRouter();
   const searchParams = useSearchParams();
   const currentPlayerId = searchParams?.get?.('playerId') || null;
+  
+  console.log('🎮 Current Player ID:', currentPlayerId);
 
   const [players, setPlayers] = useState<Player[]>([]);
   const [loading, setLoading] = useState(true);
@@ -20,6 +24,9 @@ export default function PregameClient({ code }: { code: string }) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [addingBot, setAddingBot] = useState(false);
+
+  // Check if current player is the host (first player in the list)
+  const isHost = players.length > 0 && players[0]?.id === currentPlayerId;
 
   useEffect(() => {
     if (!code) return;
@@ -286,12 +293,14 @@ export default function PregameClient({ code }: { code: string }) {
             <button
               className="px-4 py-2 bg-purple-500 text-white rounded hover:bg-purple-600 transition-colors disabled:bg-gray-500 disabled:cursor-not-allowed"
               onClick={addBot}
-              disabled={addingBot || players.length >= 8}
+              disabled={!isHost || addingBot || players.length >= 8}
+              title={!isHost ? "Only the host can add bots" : ""}
             >
               {addingBot ? 'Adding Bot...' : '🤖 Add Bot'}
             </button>
             <button
               className="px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600 transition-colors disabled:bg-gray-500 disabled:cursor-not-allowed"
+              title={!isHost ? "Only the host can start the game" : ""}
               onClick={async () => {
                 if (players.length < 2) {
                   alert("Need at least 2 players to start");
@@ -323,7 +332,7 @@ export default function PregameClient({ code }: { code: string }) {
                   alert('Failed to start game');
                 }
               }}
-              disabled={players.length < 2}
+              disabled={!isHost || players.length < 2}
             >
               Start Game {players.length < 2 && `(${players.length}/2)`}
             </button>

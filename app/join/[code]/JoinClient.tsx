@@ -46,7 +46,7 @@ export default function JoinClient({ code }: Props) {
 
       const data = await joinRes.json();
       setJoinLoading(false);
-      router.push(`/lobby/${encodeURIComponent(code)}?playerId=${encodeURIComponent(data.id)}`);
+      router.push(`/pre-game-lobby/${encodeURIComponent(code)}?playerId=${encodeURIComponent(data.id)}`);
     } catch (err) {
       setJoinLoading(false);
       console.error(err);
