@@ -77,12 +77,45 @@ export default function GameLobbyClient({ code }: { code: string }) {
       }
     })();
 
+    // Polling fallback for game state updates
+    console.log('Setting up polling for game lobby:', codeUpper);
+    const pollInterval = setInterval(async () => {
+      try {
+        const { data, error } = await supabase
+          .from("lobbies")
+          .select("players, game_state, deck")
+          .eq("code", codeUpper)
+          .maybeSingle();
+        
+        if (error) {
+          console.error('Polling error:', error);
+        } else if (data && mounted) {
+          console.log(`[${new Date().toLocaleTimeString()}] Poll - phase: ${data.game_state?.phase || 'none'}`);
+          
+          // Update if game state changed
+          if (JSON.stringify(data.game_state) !== JSON.stringify(gameState)) {
+            console.log('Game state changed! Updating...');
+            setPlayers(data.players || []);
+            if (data.game_state) {
+              setGameState(data.game_state);
+            }
+            if (data.deck) {
+              setDeck(data.deck);
+            }
+          }
+        }
+      } catch (err) {
+        console.error('Polling exception:', err);
+      }
+    }, 1000); // Poll every 1 second
+
     const channel = supabase
       .channel(`lobby-${codeUpper}`)
       .on(
         "postgres_changes",
         { event: "UPDATE", schema: "public", table: "lobbies", filter: `code=eq.${codeUpper}` },
         (payload) => {
+          console.log('Realtime update received in game lobby:', payload);
           if (mounted) {
             setPlayers(payload.new.players || []);
             if (payload.new.game_state) {
@@ -94,13 +127,16 @@ export default function GameLobbyClient({ code }: { code: string }) {
           }
         }
       )
-      .subscribe();
+      .subscribe((status) => {
+        console.log('Game lobby realtime subscription status:', status);
+      });
 
     return () => {
       mounted = false;
+      clearInterval(pollInterval);
       supabase.removeChannel(channel);
     };
-  }, [code]);
+  }, [code, gameState]);
 
   // Create a shuffled deck
   const createShuffledDeck = (): Card[] => {
