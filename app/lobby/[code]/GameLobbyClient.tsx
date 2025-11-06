@@ -305,7 +305,7 @@ export default function GameLobbyClient({ code }: { code: string }) {
                    (guess === 'same' && card1Value === card0Value);
         break;
       
-      case 2: // Between or Outside
+      case 2: // Between, Outside, or Same
         const firstValue = getCardValue(currentPlayer.cards[0].card);
         const secondValue = getCardValue(currentPlayer.cards[1].card);
         const thirdValue = getCardValue(card);
@@ -313,7 +313,8 @@ export default function GameLobbyClient({ code }: { code: string }) {
         const max = Math.max(firstValue, secondValue);
         
         isCorrect = (guess === 'between' && thirdValue > min && thirdValue < max) ||
-                   (guess === 'outside' && (thirdValue <= min || thirdValue >= max));
+                   (guess === 'outside' && (thirdValue <= min || thirdValue >= max)) ||
+                   (guess === 'same' && (thirdValue === min || thirdValue === max));
         break;
       
       case 3: // Suit
@@ -907,9 +908,10 @@ function GuessButtons({ cardIndex, onGuess }: { cardIndex: number; onGuess: (gue
   if (cardIndex === 2) {
     return (
       <div>
-        <p className="text-white mb-3 text-lg">Between or Outside?</p>
+        <p className="text-white mb-3 text-lg">Between, Outside, or Same?</p>
         <div className="flex gap-3">
           <Button onClick={() => onGuess('between')}>Between</Button>
+          <Button onClick={() => onGuess('same')}>Same</Button>
           <Button onClick={() => onGuess('outside')}>Outside</Button>
         </div>
       </div>
