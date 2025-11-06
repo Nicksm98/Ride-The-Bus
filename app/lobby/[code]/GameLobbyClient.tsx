@@ -159,8 +159,8 @@ export default function GameLobbyClient({ code }: { code: string }) {
     return allCards;
   };
 
-  // Draw a card from deck
-  const drawCardFromDeck = (): Card => {
+  // Draw a card from deck - returns both the card and updated deck
+  const drawCardFromDeck = (): { card: Card; updatedDeck: Card[] } => {
     const availableCards = deck.filter(c => !c.drawn);
     if (availableCards.length === 0) {
       throw new Error('No cards left in deck');
@@ -168,18 +168,17 @@ export default function GameLobbyClient({ code }: { code: string }) {
     const card = availableCards[0];
     
     // Mark ONLY THE FIRST matching card as drawn (important for 2-deck games)
-    setDeck(current => {
-      let cardMarked = false;
-      return current.map(c => {
-        if (!cardMarked && !c.drawn && c.suit === card.suit && c.rank === card.rank) {
-          cardMarked = true;
-          return { ...c, drawn: true };
-        }
-        return c;
-      });
+    let cardMarked = false;
+    const updatedDeck = deck.map(c => {
+      if (!cardMarked && !c.drawn && c.suit === card.suit && c.rank === card.rank) {
+        cardMarked = true;
+        return { ...c, drawn: true };
+      }
+      return c;
     });
     
-    return card;
+    setDeck(updatedDeck);
+    return { card, updatedDeck };
   };
 
   // Start the game
@@ -423,7 +422,7 @@ export default function GameLobbyClient({ code }: { code: string }) {
       }
 
       // Draw a card
-      const drawnCard = drawCardFromDeck();
+      const { card: drawnCard, updatedDeck } = drawCardFromDeck();
       
       // Determine Good/Bad/Ugly
       const cycle: ('good' | 'bad' | 'ugly')[] = ['good', 'bad', 'ugly'];
@@ -435,7 +434,7 @@ export default function GameLobbyClient({ code }: { code: string }) {
         round2Index: gameState.round2Index + 1
       };
       setGameState(newState);
-      syncGameState(newState, deck);
+      syncGameState(newState, updatedDeck);
     } catch (err) {
       console.error('Failed to draw card:', err);
     }
@@ -525,12 +524,24 @@ export default function GameLobbyClient({ code }: { code: string }) {
     }
   }, [gameState, syncGameState]);
 
+  // Round 3: Set partner suggestion
+  const handleSetPartnerSuggestion = useCallback((suggestion: 'higher' | 'lower' | 'same' | null) => {
+    if (!gameState) return;
+    
+    const newState = {
+      ...gameState,
+      busDriverPartnerSuggestion: suggestion
+    };
+    setGameState(newState);
+    syncGameState(newState);
+  }, [gameState, syncGameState]);
+
   // Round 3: Guess suit of first card
   const handleRound3GuessSuit = useCallback((suit: Card['suit']) => {
     if (!gameState) return;
 
     try {
-      const card = drawCardFromDeck();
+      const { card, updatedDeck } = drawCardFromDeck();
       const isCorrect = card.suit === suit;
 
       if (isCorrect) {
@@ -541,7 +552,7 @@ export default function GameLobbyClient({ code }: { code: string }) {
           busDriverCorrectGuesses: 1
         };
         setGameState(newState);
-        syncGameState(newState, deck);
+        syncGameState(newState, updatedDeck);
       } else {
         // Wrong: bus driver drinks, but still place the card and continue
         setShowDrinkPrompt(true);
@@ -554,7 +565,7 @@ export default function GameLobbyClient({ code }: { code: string }) {
           busDriverCorrectGuesses: 0
         };
         setGameState(newState);
-        syncGameState(newState, deck);
+        syncGameState(newState, updatedDeck);
       }
     } catch (err) {
       console.error('Failed to draw card:', err);
@@ -594,7 +605,7 @@ export default function GameLobbyClient({ code }: { code: string }) {
         return;
       }
 
-      const card = drawCardFromDeck();
+      const { card, updatedDeck } = drawCardFromDeck();
       const lastCard = gameState.busDriverCards[gameState.busDriverCards.length - 1];
       const lastValue = getCardValue(lastCard);
       const newValue = getCardValue(card);
@@ -615,7 +626,7 @@ export default function GameLobbyClient({ code }: { code: string }) {
           busDriverCorrectGuesses: newCorrectCount
         };
         setGameState(newState);
-        syncGameState(newState, deck);
+        syncGameState(newState, updatedDeck);
 
         // Check if they've won (10 correct guesses total)
         if (newCorrectCount >= 10) {
@@ -635,7 +646,7 @@ export default function GameLobbyClient({ code }: { code: string }) {
           busDriverPartnerIndex: gameState.busDriverPartnerIndex + 1
         };
         setGameState(newState);
-        syncGameState(newState, deck);
+        syncGameState(newState, updatedDeck);
       }
     } catch (err) {
       console.error('Failed to draw card:', err);
@@ -721,6 +732,7 @@ export default function GameLobbyClient({ code }: { code: string }) {
           onRound2SelectPlayer={handleRound2Action}
           onRound3GuessSuit={handleRound3GuessSuit}
           onRound3GuessHigherLowerSame={handleRound3GuessHigherLowerSame}
+          onSetPartnerSuggestion={handleSetPartnerSuggestion}
           deckCardsRemaining={deck.filter(c => !c.drawn).length}
         />
         
@@ -745,6 +757,7 @@ function GamePhaseView({
   onRound2SelectPlayer,
   onRound3GuessSuit,
   onRound3GuessHigherLowerSame,
+  onSetPartnerSuggestion,
   deckCardsRemaining
 }: { 
   gameState: GameState;
@@ -754,6 +767,7 @@ function GamePhaseView({
   onRound2SelectPlayer: (fromPlayerId: string, toPlayerId?: string, shouldClearCard?: boolean) => void;
   onRound3GuessSuit: (suit: Card['suit']) => void;
   onRound3GuessHigherLowerSame: (guess: 'higher' | 'lower' | 'same') => void;
+  onSetPartnerSuggestion: (suggestion: 'higher' | 'lower' | 'same' | null) => void;
   deckCardsRemaining: number;
 }) {
   if (gameState.phase === 'round1_guessing') {
@@ -781,6 +795,7 @@ function GamePhaseView({
       currentPlayerId={currentPlayerId}
       onGuessSuit={onRound3GuessSuit}
       onGuessHigherLowerSame={onRound3GuessHigherLowerSame}
+      onSetPartnerSuggestion={onSetPartnerSuggestion}
       onDrinksPenalty={() => {}}
       deckCardsRemaining={deckCardsRemaining}
     />;
@@ -1243,6 +1258,7 @@ function Round3View({
   currentPlayerId,
   onGuessSuit,
   onGuessHigherLowerSame,
+  onSetPartnerSuggestion,
   onDrinksPenalty: _onDrinksPenalty,
   deckCardsRemaining
 }: { 
@@ -1250,6 +1266,7 @@ function Round3View({
   currentPlayerId: string | null;
   onGuessSuit: (suit: Card['suit']) => void;
   onGuessHigherLowerSame: (guess: 'higher' | 'lower' | 'same') => void;
+  onSetPartnerSuggestion: (suggestion: 'higher' | 'lower' | 'same' | null) => void;
   onDrinksPenalty: () => void;
   deckCardsRemaining: number;
 }) {
@@ -1261,6 +1278,9 @@ function Round3View({
   // Get all players except the bus driver
   const otherPlayers = gameState.players.filter(p => p.id !== gameState.busDriverId);
   const partner = otherPlayers[gameState.busDriverPartnerIndex % otherPlayers.length];
+  const isPartner = partner?.id === currentPlayerId;
+  
+  const partnerSuggestion = gameState.busDriverPartnerSuggestion;
   
   const totalCardsNeeded = 10; // 10 correct guesses to win
   const progress = (gameState.busDriverCorrectGuesses / totalCardsNeeded) * 100;
@@ -1277,6 +1297,13 @@ function Round3View({
       setShowDrinkDistribution(false);
     }
   }, [gameState.busDriverCards.length, gameState.busDriverCorrectGuesses]);
+
+  // Clear partner suggestion when new card is drawn
+  React.useEffect(() => {
+    if (partnerSuggestion) {
+      onSetPartnerSuggestion(null);
+    }
+  }, [gameState.busDriverCards.length, partnerSuggestion, onSetPartnerSuggestion]);
 
   return (
     <div className="flex flex-col items-center justify-between h-full py-2 relative">
@@ -1384,6 +1411,20 @@ function Round3View({
           <p className="text-white/70 text-xs mb-3">
             Current: {gameState.busDriverCards[gameState.busDriverCards.length - 1].rank.toUpperCase()}
           </p>
+          
+          {/* Partner suggestion display */}
+          {partnerSuggestion && (
+            <div className="bg-blue-500/20 border border-blue-400 p-2 rounded mb-2">
+              <p className="text-blue-300 text-xs">
+                {partner?.name} suggests: <span className="font-bold text-white">
+                  {partnerSuggestion === 'higher' ? '⬆️ Higher' : 
+                   partnerSuggestion === 'lower' ? '⬇️ Lower' : 
+                   '= Same'}
+                </span>
+              </p>
+            </div>
+          )}
+          
           {isBusDriver ? (
             <div className="flex gap-2 justify-center">
               <Button onClick={() => onGuessHigherLowerSame('higher')} size="sm" className="bg-green-600 text-xs py-1">
@@ -1395,6 +1436,36 @@ function Round3View({
               <Button onClick={() => onGuessHigherLowerSame('lower')} size="sm" className="bg-blue-600 text-xs py-1">
                 ⬇️ Lower
               </Button>
+            </div>
+          ) : isPartner ? (
+            <div>
+              <p className="text-blue-300 text-xs mb-2">Make a suggestion for {busDriver?.name}:</p>
+              <div className="flex gap-2 justify-center">
+                <Button 
+                  onClick={() => onSetPartnerSuggestion('higher')} 
+                  size="sm" 
+                  className="bg-green-600/50 text-xs py-1"
+                  variant={partnerSuggestion === 'higher' ? 'default' : 'outline'}
+                >
+                  ⬆️ Higher
+                </Button>
+                <Button 
+                  onClick={() => onSetPartnerSuggestion('same')} 
+                  size="sm" 
+                  className="bg-yellow-600/50 text-xs py-1"
+                  variant={partnerSuggestion === 'same' ? 'default' : 'outline'}
+                >
+                  = Same
+                </Button>
+                <Button 
+                  onClick={() => onSetPartnerSuggestion('lower')} 
+                  size="sm" 
+                  className="bg-blue-600/50 text-xs py-1"
+                  variant={partnerSuggestion === 'lower' ? 'default' : 'outline'}
+                >
+                  ⬇️ Lower
+                </Button>
+              </div>
             </div>
           ) : (
             <p className="text-yellow-400 text-sm">Waiting for {busDriver?.name} to guess...</p>

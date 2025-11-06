@@ -53,6 +53,7 @@ export type GameState = {
   busDriverPartnerIndex: number; // Index of current partner (to right of bus driver)
   busDriverCards: Card[];       // The 5-10 cards being guessed
   busDriverCorrectGuesses: number; // How many correct guesses made
+  busDriverPartnerSuggestion?: 'higher' | 'lower' | 'same' | null; // Partner's suggestion
 };
 
 export const CARD_VALUES: Record<Card['rank'], number> = {
