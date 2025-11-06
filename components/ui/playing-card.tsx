@@ -35,8 +35,10 @@ export function PlayingCard({ card }: { card: Card }) {
 
 export function CardBack() {
   return (
-    <div className="w-24 h-36 rounded-lg bg-linear-to-br from-blue-600 to-blue-800 shadow-lg border-2 border-gray-200 flex items-center justify-center">
-      <div className="w-20 h-32 rounded-lg border-2 border-white/20 bg-pattern-cross"></div>
+    <div className="w-24 h-36 rounded-lg bg-gradient-to-br from-blue-600 to-blue-800 shadow-lg border-2 border-gray-200 flex items-center justify-center">
+      <div className="w-20 h-32 rounded-lg border-4 border-white/30 bg-blue-700/50 flex items-center justify-center">
+        <div className="text-white/40 text-6xl font-bold">🂠</div>
+      </div>
     </div>
   );
 }
