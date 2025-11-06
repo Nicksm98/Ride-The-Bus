@@ -956,6 +956,23 @@ function Round2View({
   const allUglyCardsGiven = playersWithUglyMatch.every(p => uglyCardsGiven.has(p.id));
   const allGoodCardsGiven = playersWithGoodMatch.every(p => goodCardsGiven.has(p.id));
   
+  // Automatically set the current player who needs to act
+  React.useEffect(() => {
+    if (gameState.round2CardDrawn) {
+      if (currentAction === 'ugly') {
+        const firstUnprocessedPlayer = playersWithUglyMatch.find(p => !uglyCardsGiven.has(p.id));
+        if (firstUnprocessedPlayer && !uglyCardFromPlayer) {
+          setUglyCardFromPlayer(firstUnprocessedPlayer.id);
+        }
+      } else if (currentAction === 'good') {
+        const firstUnprocessedPlayer = playersWithGoodMatch.find(p => !goodCardsGiven.has(p.id));
+        if (firstUnprocessedPlayer && !goodCardFromPlayer) {
+          setGoodCardFromPlayer(firstUnprocessedPlayer.id);
+        }
+      }
+    }
+  }, [gameState.round2CardDrawn, currentAction, playersWithUglyMatch, playersWithGoodMatch, uglyCardsGiven, goodCardsGiven, uglyCardFromPlayer, goodCardFromPlayer]);
+  
   // Reset cards given when new card is drawn
   React.useEffect(() => {
     if (!gameState.round2CardDrawn) {
@@ -1003,14 +1020,18 @@ function Round2View({
           </div>
           <p className="text-white text-sm mb-2">{actionDescriptions[currentAction]}</p>
 
-          {/* Draw button if no card */}
+          {/* Draw button if no card - only host can draw */}
           {!gameState.round2CardDrawn && (
-            <Button onClick={onDrawCard} size="sm" className="mb-2">
-              Draw Card
-            </Button>
+            currentPlayerId === gameState.players[0]?.id ? (
+              <Button onClick={onDrawCard} size="sm" className="mb-2">
+                Draw Card
+              </Button>
+            ) : (
+              <p className="text-white/70 text-sm mb-2">Waiting for host to draw...</p>
+            )
           )}
 
-          {/* Continue button when no matches OR when all cards given */}
+          {/* Continue button when no matches OR when all cards given - only host can continue */}
           {gameState.round2CardDrawn && !uglyCardFromPlayer && !goodCardFromPlayer && (
             (
               !gameState.players.some(p => 
@@ -1019,23 +1040,31 @@ function Round2View({
               (currentAction === 'ugly' && allUglyCardsGiven) ||
               (currentAction === 'good' && allGoodCardsGiven)
             ) && (
-              <Button onClick={onDrawCard} size="sm" className="mb-2">
-                {currentAction === 'ugly' && playersWithUglyMatch.length > 0 ? 
-                   `Draw Next Card (${uglyCardsGiven.size}/${playersWithUglyMatch.length} given)` :
-                 currentAction === 'good' && playersWithGoodMatch.length > 0 ? 
-                   `Draw Next Card (${goodCardsGiven.size}/${playersWithGoodMatch.length} given)` :
-                   'No Matches - Continue'}
-              </Button>
+              currentPlayerId === gameState.players[0]?.id ? (
+                <Button onClick={onDrawCard} size="sm" className="mb-2">
+                  {currentAction === 'ugly' && playersWithUglyMatch.length > 0 ? 
+                     `Draw Next Card (${uglyCardsGiven.size}/${playersWithUglyMatch.length} given)` :
+                   currentAction === 'good' && playersWithGoodMatch.length > 0 ? 
+                     `Draw Next Card (${goodCardsGiven.size}/${playersWithGoodMatch.length} given)` :
+                     'No Matches - Continue'}
+                </Button>
+              ) : (
+                <p className="text-white/70 text-sm mb-2">Waiting for host to continue...</p>
+              )
             )
           )}
 
-          {/* Bad card: Click to continue */}
+          {/* Bad card: Click to continue - only host */}
           {gameState.round2CardDrawn && currentAction === 'bad' && gameState.players.some(p => 
             p.cards.some(pc => pc.card.rank === gameState.round2CardDrawn!.rank)
           ) && (
-            <Button onClick={() => onSelectPlayer('', undefined)} size="sm" className="mb-2">
-              Draw Next Card
-            </Button>
+            currentPlayerId === gameState.players[0]?.id ? (
+              <Button onClick={() => onSelectPlayer('', undefined)} size="sm" className="mb-2">
+                Draw Next Card
+              </Button>
+            ) : (
+              <p className="text-white/70 text-sm mb-2">Waiting for host to continue...</p>
+            )
           )}
         </div>
 
@@ -1092,94 +1121,56 @@ function Round2View({
               {/* Button area - will be pushed to bottom */}
               <div>
 
-              {/* Action button if card matches (only for good/ugly, not bad) */}
-              {hasMatch && gameState.round2CardDrawn && !uglyCardFromPlayer && !goodCardFromPlayer && currentAction !== 'bad' && (
+              {/* Status indicators for good/ugly cards */}
+              {hasMatch && gameState.round2CardDrawn && currentAction !== 'bad' && (
                 (() => {
-                  // For ugly cards, only show button for the first player who hasn't given yet
+                  // For ugly cards
                   if (currentAction === 'ugly') {
-                    const playersWithUglyMatch = playersWithMatch;
-                    const firstUnprocessedPlayer = playersWithUglyMatch.find(p => !uglyCardsGiven.has(p.id));
-                    const isMyTurn = firstUnprocessedPlayer?.id === player.id;
-                    const isMyHand = player.id === currentPlayerId;
-                    
-                    if (!isMyTurn) {
-                      // Show waiting indicator for players who have already given or aren't next
-                      if (uglyCardsGiven.has(player.id)) {
-                        return (
-                          <div className="mt-1 text-green-400 text-xs font-bold text-center">
-                            ✓ Card Given
-                          </div>
-                        );
-                      } else {
-                        return (
-                          <div className="mt-1 text-gray-400 text-xs text-center">
-                            Waiting...
-                          </div>
-                        );
-                      }
-                    }
-                    
-                    // Only show button if this is my hand
-                    if (!isMyHand) {
+                    if (uglyCardsGiven.has(player.id)) {
                       return (
-                        <div className="mt-1 text-yellow-400 text-xs text-center">
-                          {player.name}&apos;s Turn
+                        <div className="mt-1 text-green-400 text-xs font-bold text-center">
+                          ✓ Card Given
+                        </div>
+                      );
+                    } else if (player.id === uglyCardFromPlayer) {
+                      return (
+                        <div className="mt-1 text-yellow-400 text-xs text-center font-bold">
+                          {player.id === currentPlayerId ? 'Choose who receives card ↓' : `${player.name} is choosing...`}
+                        </div>
+                      );
+                    } else {
+                      return (
+                        <div className="mt-1 text-gray-400 text-xs text-center">
+                          Waiting...
                         </div>
                       );
                     }
                   }
                   
-                  // For good cards, only show button for the first player who hasn't given yet
+                  // For good cards
                   if (currentAction === 'good') {
-                    const playersWithGoodMatch = playersWithMatch;
-                    const firstUnprocessedPlayer = playersWithGoodMatch.find(p => !goodCardsGiven.has(p.id));
-                    const isMyTurn = firstUnprocessedPlayer?.id === player.id;
-                    const isMyHand = player.id === currentPlayerId;
-                    
-                    if (!isMyTurn) {
-                      // Show waiting indicator for players who have already given or aren't next
-                      if (goodCardsGiven.has(player.id)) {
-                        return (
-                          <div className="mt-1 text-green-400 text-xs font-bold text-center">
-                            ✓ Drink Given
-                          </div>
-                        );
-                      } else {
-                        return (
-                          <div className="mt-1 text-gray-400 text-xs text-center">
-                            Waiting...
-                          </div>
-                        );
-                      }
-                    }
-                    
-                    // Only show button if this is my hand
-                    if (!isMyHand) {
+                    if (goodCardsGiven.has(player.id)) {
                       return (
-                        <div className="mt-1 text-yellow-400 text-xs text-center">
-                          {player.name}&apos;s Turn
+                        <div className="mt-1 text-green-400 text-xs font-bold text-center">
+                          ✓ Drink Given
+                        </div>
+                      );
+                    } else if (player.id === goodCardFromPlayer) {
+                      return (
+                        <div className="mt-1 text-yellow-400 text-xs text-center font-bold">
+                          {player.id === currentPlayerId ? 'Choose who drinks ↓' : `${player.name} is choosing...`}
+                        </div>
+                      );
+                    } else {
+                      return (
+                        <div className="mt-1 text-gray-400 text-xs text-center">
+                          Waiting...
                         </div>
                       );
                     }
                   }
                   
-                  return (
-                    <Button 
-                      onClick={() => {
-                        if (currentAction === 'ugly') {
-                          setUglyCardFromPlayer(player.id);
-                        } else if (currentAction === 'good') {
-                          setGoodCardFromPlayer(player.id);
-                        }
-                      }}
-                      size="sm"
-                      className="mt-1 w-full text-xs py-1"
-                      variant={currentAction === 'good' ? 'default' : 'secondary'}
-                    >
-                      {currentAction === 'good' && 'Choose Drinker'}
-                      {currentAction === 'ugly' && 'Give Card'}
-                    </Button>
-                  );
+                  return null;
                 })()
               )}
 
