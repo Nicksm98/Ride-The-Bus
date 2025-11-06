@@ -83,15 +83,17 @@ export default function PregameClient({ code }: { code: string }) {
           .maybeSingle();
         
         if (!error && data && mounted) {
+          console.log('Poll update - players:', data.players?.length, 'status:', data.status);
           setPlayers(data.players || []);
           if (data.status === 'in-progress') {
+            console.log('Game started! Redirecting to game lobby...');
             router.push(`/lobby/${encodeURIComponent(code)}?playerId=${encodeURIComponent(currentPlayerId || '')}`);
           }
         }
       } catch (err) {
         console.error('Polling error:', err);
       }
-    }, 2000); // Poll every 2 seconds
+    }, 1000); // Poll every 1 second for faster response
 
     return () => {
       mounted = false;
@@ -282,20 +284,25 @@ export default function PregameClient({ code }: { code: string }) {
                   return;
                 }
                 
+                console.log('Starting game for lobby:', code.toUpperCase());
+                
                 // Update lobby status to start the game for everyone
                 try {
-                  const { error } = await supabase
+                  const { data, error } = await supabase
                     .from('lobbies')
                     .update({ status: 'in-progress' })
                     .eq('code', code.toUpperCase());
                   
+                  console.log('Update result:', { data, error });
+                  
                   if (error) {
                     console.error('Failed to start game:', error);
-                    alert('Failed to start game');
+                    alert(`Failed to start game: ${error.message}`);
                     return;
                   }
                   
-                  // Navigate host immediately (others will be redirected via realtime)
+                  console.log('Game started successfully, redirecting host...');
+                  // Navigate host immediately (others will be redirected via realtime/polling)
                   router.push(`/lobby/${encodeURIComponent(code)}?playerId=${encodeURIComponent(currentPlayerId || '')}`);
                 } catch (err) {
                   console.error('Failed to start game:', err);
