@@ -328,9 +328,10 @@ export default function GameLobbyClient({ code }: { code: string }) {
       setTimeout(() => setShowDrinkPrompt(false), 2000);
     }
 
-    // Reveal the card
+    // Reveal the card and mark if guess was correct
     const updatedPlayers = [...gameState.players];
     updatedPlayers[gameState.currentPlayerIndex].cards[cardIndex].revealed = true;
+    updatedPlayers[gameState.currentPlayerIndex].cards[cardIndex].guessedCorrectly = isCorrect;
 
     // Move to next card or next player
     if (cardIndex < 3) {
@@ -829,9 +830,18 @@ function Round1View({
             <div className="text-white font-bold text-xs mb-1">{player.name}</div>
             <div className="flex flex-wrap h-[150px] overflow-hidden">
               {player.cards.map((pc, idx) => (
-                <div key={idx} className="transform scale-[0.40] origin-top-left -mr-8 -mb-16">
+                <div key={idx} className="transform scale-[0.40] origin-top-left -mr-8 -mb-16 relative">
                   {pc.revealed ? (
-                    <PlayingCard card={pc.card} />
+                    <>
+                      <PlayingCard card={pc.card} />
+                      {pc.guessedCorrectly !== undefined && (
+                        <div className={`absolute -top-2 -right-2 text-4xl font-bold ${
+                          pc.guessedCorrectly ? 'text-green-500' : 'text-red-500'
+                        }`}>
+                          {pc.guessedCorrectly ? '✓' : '✗'}
+                        </div>
+                      )}
+                    </>
                   ) : (
                     <CardBack />
                   )}
@@ -1181,8 +1191,8 @@ function Round2View({
                 </div>
               )}
 
-              {/* Good: Select who drinks */}
-              {goodCardFromPlayer && currentAction === 'good' && player.id !== goodCardFromPlayer && (
+              {/* Good: Select who drinks - only show to the player who is giving */}
+              {goodCardFromPlayer && currentAction === 'good' && player.id !== goodCardFromPlayer && goodCardFromPlayer === currentPlayerId && (
                 <Button 
                   onClick={() => {
                     const newGoodCardsGiven = new Set([...goodCardsGiven, goodCardFromPlayer]);
@@ -1199,8 +1209,8 @@ function Round2View({
                 </Button>
               )}
 
-              {/* Ugly: Select who receives card */}
-              {uglyCardFromPlayer && currentAction === 'ugly' && player.id !== uglyCardFromPlayer && (
+              {/* Ugly: Select who receives card - only show to the player who is giving */}
+              {uglyCardFromPlayer && currentAction === 'ugly' && player.id !== uglyCardFromPlayer && uglyCardFromPlayer === currentPlayerId && (
                 <Button 
                   onClick={() => {
                     const newUglyCardsGiven = new Set([...uglyCardsGiven, uglyCardFromPlayer]);

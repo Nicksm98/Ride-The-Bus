@@ -25,6 +25,7 @@ export type GoodBadUgly = 'good' | 'bad' | 'ugly';
 export type PlayerCard = {
   card: Card;
   revealed: boolean;
+  guessedCorrectly?: boolean; // Whether the guess was correct (undefined if not yet revealed)
 };
 
 export type PlayerState = {
