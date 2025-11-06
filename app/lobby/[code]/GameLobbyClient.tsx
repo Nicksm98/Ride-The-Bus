@@ -24,6 +24,26 @@ export default function GameLobbyClient({ code }: { code: string }) {
   const [showDrinkPrompt, setShowDrinkPrompt] = useState(false);
   const [deck, setDeck] = useState<Card[]>([]);
 
+  // Helper function to sync game state to database
+  const syncGameState = async (newGameState: GameState, newDeck?: Card[]) => {
+    try {
+      const res = await fetch(`/api/lobbies/${encodeURIComponent(code)}/update-game`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          gameState: newGameState,
+          deck: newDeck || deck
+        }),
+      });
+
+      if (!res.ok) {
+        console.error('Failed to sync game state:', await res.text());
+      }
+    } catch (err) {
+      console.error('Failed to sync game state:', err);
+    }
+  };
+
   // Load lobby data and game state
   useEffect(() => {
     if (!code) return;
@@ -279,7 +299,9 @@ export default function GameLobbyClient({ code }: { code: string }) {
     // Move to next card or next player
     if (cardIndex < 3) {
       updatedPlayers[gameState.currentPlayerIndex].currentCardIndex++;
-      setGameState({ ...gameState, players: updatedPlayers });
+      const newState = { ...gameState, players: updatedPlayers };
+      setGameState(newState);
+      syncGameState(newState);
     } else {
       // Move to next player
       const nextPlayerIndex = (gameState.currentPlayerIndex + 1) % gameState.players.length;
@@ -290,21 +312,25 @@ export default function GameLobbyClient({ code }: { code: string }) {
       // Check if round 1 is complete
       if (nextPlayerIndex === 0) {
         // All players finished, move to round 2
-        setGameState({
+        const newState: GameState = {
           ...gameState,
           players: updatedPlayers,
           phase: 'round2_goodbadugly',
           currentPlayerIndex: 0
-        });
+        };
+        setGameState(newState);
+        syncGameState(newState);
       } else {
-        setGameState({
+        const newState = {
           ...gameState,
           players: updatedPlayers,
           currentPlayerIndex: nextPlayerIndex
-        });
+        };
+        setGameState(newState);
+        syncGameState(newState);
       }
     }
-  }, [gameState]);
+  }, [gameState, syncGameState]);
 
   // Round 2: Draw a card and handle Good/Bad/Ugly
   const handleRound2DrawCard = useCallback(() => {
@@ -345,7 +371,7 @@ export default function GameLobbyClient({ code }: { code: string }) {
           cards: []
         }));
 
-        setGameState({
+        const newState: GameState = {
           ...gameState,
           players: playersWithoutCards,
           phase: 'round3_busdriver',
@@ -353,7 +379,9 @@ export default function GameLobbyClient({ code }: { code: string }) {
           busDriverPartnerIndex: 0,
           busDriverCards: [],
           busDriverCorrectGuesses: 0
-        });
+        };
+        setGameState(newState);
+        syncGameState(newState, shuffledCards);
         return;
       }
 
@@ -364,11 +392,13 @@ export default function GameLobbyClient({ code }: { code: string }) {
       const cycle: ('good' | 'bad' | 'ugly')[] = ['good', 'bad', 'ugly'];
       const currentAction = cycle[gameState.round2Index % 3];
 
-      setGameState({
+      const newState = {
         ...gameState,
         round2CardDrawn: drawnCard,
         round2Index: gameState.round2Index + 1
-      });
+      };
+      setGameState(newState);
+      syncGameState(newState, deck);
     } catch (err) {
       console.error('Failed to draw card:', err);
     }
@@ -383,19 +413,23 @@ export default function GameLobbyClient({ code }: { code: string }) {
     
     // Good cards: player chooses who drinks, NO card modifications
     if (currentAction === 'good' && toPlayerId) {
-      setGameState({
+      const newState = {
         ...gameState,
         round2CardDrawn: shouldClearCard ? null : gameState.round2CardDrawn
-      });
+      };
+      setGameState(newState);
+      syncGameState(newState);
       return;
     }
 
     // Bad cards: player drinks, NO card modifications
     if (currentAction === 'bad') {
-      setGameState({
+      const newState = {
         ...gameState,
         round2CardDrawn: null
-      });
+      };
+      setGameState(newState);
+      syncGameState(newState);
       return;
     }
 
@@ -443,14 +477,16 @@ export default function GameLobbyClient({ code }: { code: string }) {
         return p;
       });
 
-      setGameState({
+      const newState = {
         ...gameState,
         players: updatedPlayers,
         round2CardDrawn: shouldClearCard ? null : gameState.round2CardDrawn
-      });
+      };
+      setGameState(newState);
+      syncGameState(newState);
       return;
     }
-  }, [gameState]);
+  }, [gameState, syncGameState]);
 
   // Round 3: Guess suit of first card
   const handleRound3GuessSuit = useCallback((suit: Card['suit']) => {
@@ -462,22 +498,26 @@ export default function GameLobbyClient({ code }: { code: string }) {
 
       if (isCorrect) {
         // Correct: give out 2 drinks (handled in UI), increment correct guesses
-        setGameState({
+        const newState = {
           ...gameState,
           busDriverCards: [card],
           busDriverCorrectGuesses: 1
-        });
+        };
+        setGameState(newState);
+        syncGameState(newState, deck);
       } else {
         // Wrong: bus driver drinks, but still place the card and continue
         setShowDrinkPrompt(true);
         setTimeout(() => setShowDrinkPrompt(false), 2000);
         
         // Place the card on the table with 0 correct guesses, continue to higher/lower
-        setGameState({
+        const newState = {
           ...gameState,
           busDriverCards: [card],
           busDriverCorrectGuesses: 0
-        });
+        };
+        setGameState(newState);
+        syncGameState(newState, deck);
       }
     } catch (err) {
       console.error('Failed to draw card:', err);
@@ -490,7 +530,7 @@ export default function GameLobbyClient({ code }: { code: string }) {
 
     try {
       // Check if we need to reshuffle BEFORE drawing
-      const availableCards = deck.filter(c => !c.drawn);
+      const availableCards = deck.filter((c: Card) => !c.drawn);
       if (availableCards.length === 0) {
         console.log(`Deck empty! Reshuffling...`);
         // Keep only the most recent card on the table, reshuffle all others back into deck
@@ -506,10 +546,12 @@ export default function GameLobbyClient({ code }: { code: string }) {
         setDeck(shuffled);
         
         // Update game state to keep only the most recent card on table
-        setGameState({
+        const newState = {
           ...gameState,
           busDriverCards: cardsToKeep
-        });
+        };
+        setGameState(newState);
+        syncGameState(newState, shuffled);
         
         // Return early - they need to make another guess with the refreshed deck
         return;
@@ -530,11 +572,13 @@ export default function GameLobbyClient({ code }: { code: string }) {
         const newCards = [...gameState.busDriverCards, card];
         const newCorrectCount = gameState.busDriverCorrectGuesses + 1;
 
-        setGameState({
+        const newState = {
           ...gameState,
           busDriverCards: newCards,
           busDriverCorrectGuesses: newCorrectCount
-        });
+        };
+        setGameState(newState);
+        syncGameState(newState, deck);
 
         // Check if they've won (10 correct guesses total)
         if (newCorrectCount >= 10) {
@@ -547,12 +591,14 @@ export default function GameLobbyClient({ code }: { code: string }) {
 
         // Add the wrong card to the table, move to next partner, reset correct count
         const newCards = [...gameState.busDriverCards, card];
-        setGameState({
+        const newState = {
           ...gameState,
           busDriverCards: newCards,
           busDriverCorrectGuesses: 0,
           busDriverPartnerIndex: gameState.busDriverPartnerIndex + 1
-        });
+        };
+        setGameState(newState);
+        syncGameState(newState, deck);
       }
     } catch (err) {
       console.error('Failed to draw card:', err);

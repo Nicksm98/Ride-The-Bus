@@ -175,7 +175,7 @@ export async function POST(
     if (updateError) {
       console.error('Failed to update lobby:', updateError);
       return NextResponse.json(
-        { error: "Failed to start game" },
+        { error: `Failed to start game: ${updateError.message}` },
         { status: 500 }
       );
     }

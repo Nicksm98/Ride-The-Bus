@@ -317,6 +317,7 @@ export default function PregameClient({ code }: { code: string }) {
                   
                   if (!res.ok) {
                     const body = await res.json();
+                    console.error('Start game failed:', body);
                     alert(body.error || 'Failed to start game');
                     return;
                   }
