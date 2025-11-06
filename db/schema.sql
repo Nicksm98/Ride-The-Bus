@@ -10,6 +10,8 @@ CREATE TABLE IF NOT EXISTS lobbies (
   host_name text NOT NULL,
   players jsonb NOT NULL DEFAULT '[]'::jsonb,
   status text NOT NULL DEFAULT 'waiting',
+  game_state jsonb,
+  deck jsonb,
   created_at timestamptz DEFAULT now(),
   expires_at timestamptz
 );

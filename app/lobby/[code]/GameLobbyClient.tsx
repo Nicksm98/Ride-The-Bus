@@ -24,7 +24,7 @@ export default function GameLobbyClient({ code }: { code: string }) {
   const [showDrinkPrompt, setShowDrinkPrompt] = useState(false);
   const [deck, setDeck] = useState<Card[]>([]);
 
-  // Load lobby data
+  // Load lobby data and game state
   useEffect(() => {
     if (!code) return;
 
@@ -35,7 +35,7 @@ export default function GameLobbyClient({ code }: { code: string }) {
       try {
         const { data, error } = await supabase
           .from("lobbies")
-          .select("players")
+          .select("players, game_state, deck")
           .eq("code", codeUpper)
           .maybeSingle();
 
@@ -43,6 +43,12 @@ export default function GameLobbyClient({ code }: { code: string }) {
           console.error("Failed to fetch lobby", error);
         } else if (mounted && data) {
           setPlayers(data.players || []);
+          if (data.game_state) {
+            setGameState(data.game_state);
+          }
+          if (data.deck) {
+            setDeck(data.deck);
+          }
         }
       } catch (err) {
         console.error(err);
@@ -59,6 +65,12 @@ export default function GameLobbyClient({ code }: { code: string }) {
         (payload) => {
           if (mounted) {
             setPlayers(payload.new.players || []);
+            if (payload.new.game_state) {
+              setGameState(payload.new.game_state);
+            }
+            if (payload.new.deck) {
+              setDeck(payload.new.deck);
+            }
           }
         }
       )
@@ -601,24 +613,13 @@ export default function GameLobbyClient({ code }: { code: string }) {
         <div className="absolute inset-0 bg-black/50 flex flex-col items-center justify-center">
           <h1 className="text-white mb-8 text-4xl">Ride the Bus</h1>
           <div className="bg-white/10 p-8 rounded-lg backdrop-blur-sm">
-            <h2 className="text-white text-xl mb-4">Players ({players.length})</h2>
-            <ul className="space-y-2 mb-6">
+            <h2 className="text-white text-xl mb-4">Waiting for host to start game...</h2>
+            <p className="text-white/70 text-center">Players ({players.length})</p>
+            <ul className="space-y-2 mt-4">
               {players.map(p => (
                 <li key={p.id} className="text-white">{p.name}</li>
               ))}
             </ul>
-            <div className="flex gap-3">
-              <Button 
-                onClick={() => window.location.href = `/pre-game-lobby/${code}?playerId=${currentPlayerId}`} 
-                variant="outline"
-                className="flex-1"
-              >
-                Back to Lobby
-              </Button>
-              <Button onClick={startGame} className="flex-1">
-                Start Game
-              </Button>
-            </div>
           </div>
         </div>
       </div>

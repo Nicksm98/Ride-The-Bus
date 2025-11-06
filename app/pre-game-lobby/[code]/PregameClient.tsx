@@ -309,18 +309,15 @@ export default function PregameClient({ code }: { code: string }) {
                 
                 console.log('Starting game for lobby:', code.toUpperCase());
                 
-                // Update lobby status to start the game for everyone
+                // Call API to initialize game state
                 try {
-                  const { data, error } = await supabase
-                    .from('lobbies')
-                    .update({ status: 'in-progress' })
-                    .eq('code', code.toUpperCase());
+                  const res = await fetch(`/api/lobbies/${encodeURIComponent(code)}/start-game`, {
+                    method: 'POST'
+                  });
                   
-                  console.log('Update result:', { data, error });
-                  
-                  if (error) {
-                    console.error('Failed to start game:', error);
-                    alert(`Failed to start game: ${error.message}`);
+                  if (!res.ok) {
+                    const body = await res.json();
+                    alert(body.error || 'Failed to start game');
                     return;
                   }
                   
