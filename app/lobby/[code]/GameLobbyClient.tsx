@@ -23,6 +23,8 @@ export default function GameLobbyClient({ code }: { code: string }) {
   const [loading, setLoading] = useState(true);
   const [showDrinkPrompt, setShowDrinkPrompt] = useState(false);
   const [deck, setDeck] = useState<Card[]>([]);
+  const [volume, setVolume] = useState(0.3); // Volume from 0 to 1
+  const [showVolumeSlider, setShowVolumeSlider] = useState(false);
   
   // Use ref to track latest game state for polling comparison
   const gameStateRef = useRef<GameState | null>(null);
@@ -31,6 +33,45 @@ export default function GameLobbyClient({ code }: { code: string }) {
   useEffect(() => {
     gameStateRef.current = gameState;
   }, [gameState]);
+
+  // Load volume from localStorage on mount
+  useEffect(() => {
+    const savedVolume = localStorage.getItem('rtb-volume');
+    if (savedVolume !== null) {
+      setVolume(parseFloat(savedVolume));
+    }
+  }, []);
+
+  // Save volume to localStorage when it changes
+  useEffect(() => {
+    localStorage.setItem('rtb-volume', volume.toString());
+  }, [volume]);
+
+  // Play sound notification when it's player's turn
+  const playTurnSound = useCallback(() => {
+    if (volume === 0) return; // Don't play if muted
+    
+    try {
+      // Create a simple beep sound using Web Audio API
+      const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+      const oscillator = audioContext.createOscillator();
+      const gainNode = audioContext.createGain();
+      
+      oscillator.connect(gainNode);
+      gainNode.connect(audioContext.destination);
+      
+      oscillator.frequency.value = 800; // Frequency in Hz
+      oscillator.type = 'sine';
+      
+      gainNode.gain.setValueAtTime(volume, audioContext.currentTime);
+      gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.3);
+      
+      oscillator.start(audioContext.currentTime);
+      oscillator.stop(audioContext.currentTime + 0.3);
+    } catch (err) {
+      console.log('Could not play sound:', err);
+    }
+  }, [volume]);
 
   // Helper function to sync game state to database
   const syncGameState = async (newGameState: GameState, newDeck?: Card[]) => {
@@ -147,6 +188,33 @@ export default function GameLobbyClient({ code }: { code: string }) {
     };
   }, [code]); // Removed gameState from dependencies to prevent infinite re-subscriptions
 
+  // Detect when it's the player's turn and play sound
+  useEffect(() => {
+    if (!gameState || !currentPlayerId) return;
+
+    let isMyTurn = false;
+
+    // Round 1: Check if it's this player's turn to guess
+    if (gameState.phase === 'round1_dealing' && gameState.currentPlayerIndex !== undefined) {
+      const currentPlayer = gameState.players[gameState.currentPlayerIndex];
+      isMyTurn = currentPlayer?.id === currentPlayerId;
+    }
+
+    // Round 2: Check if this player is the current giver
+    if (gameState.phase === 'round2_goodbadugly' && gameState.round2CurrentGiver) {
+      isMyTurn = gameState.round2CurrentGiver === currentPlayerId;
+    }
+
+    // Round 3: Check if this player is the bus driver (for suit guess and higher/lower)
+    if (gameState.phase === 'round3_busdriver') {
+      isMyTurn = gameState.busDriverId === currentPlayerId;
+    }
+
+    if (isMyTurn) {
+      playTurnSound();
+    }
+  }, [gameState?.phase, gameState?.currentPlayerIndex, gameState?.round2CurrentGiver, gameState?.busDriverId, currentPlayerId, playTurnSound]);
+
   // Create a shuffled deck
   const createShuffledDeck = (): Card[] => {
     const suits: Card['suit'][] = ['hearts', 'diamonds', 'clubs', 'spades'];
@@ -176,7 +244,7 @@ export default function GameLobbyClient({ code }: { code: string }) {
     }
     const card = availableCards[0];
     
-    // Mark ONLY THE FIRST matching card as drawn (important for 2-deck games)
+    // Mark the card as drawn
     let cardMarked = false;
     const updatedDeck = deck.map(c => {
       if (!cardMarked && !c.drawn && c.suit === card.suit && c.rank === card.rank) {
@@ -198,14 +266,9 @@ export default function GameLobbyClient({ code }: { code: string }) {
     }
 
     try {
-      // Create deck(s) based on player count
-      const numDecks = players.length >= 5 ? 2 : 1;
-      
-      console.log(`Creating ${numDecks} deck(s)...`);
-      let combinedDeck: Card[] = [];
-      for (let i = 0; i < numDecks; i++) {
-        combinedDeck = [...combinedDeck, ...createShuffledDeck()];
-      }
+      // Create single deck for up to 6 players
+      console.log('Creating 1 deck...');
+      const combinedDeck: Card[] = createShuffledDeck();
       setDeck(combinedDeck);
       console.log(`Created deck with ${combinedDeck.length} cards for ${players.length} players`);
 
@@ -413,7 +476,7 @@ export default function GameLobbyClient({ code }: { code: string }) {
         const firstPartnerIndex = otherPlayers.findIndex(p => p.id === firstPartner.id);
 
         // Collect ALL cards from the deck array (both drawn and undrawn)
-        // The deck array contains all 104 cards (for 5 players), with some marked as drawn
+        // The deck contains 52 cards, with some marked as drawn
         // We reset all cards to undrawn for Round 3
         console.log(`Before Round 3: deck array has ${deck.length} cards (${deck.filter(c => c.drawn).length} drawn, ${deck.filter(c => !c.drawn).length} undrawn)`);
         console.log(`Players have ${gameState.players.reduce((sum, p) => sum + p.cards.length, 0)} cards total in hands`);
@@ -810,6 +873,33 @@ export default function GameLobbyClient({ code }: { code: string }) {
     <div className="h-screen w-full bg-cover bg-center relative"
       style={{ backgroundImage: `url('/green-felt.jpg')` }}>
       <div className="absolute inset-0 bg-black/50 p-4">
+        {/* Volume Control */}
+        <div className="fixed top-4 right-4 z-50 flex items-start gap-2">
+          {showVolumeSlider && (
+            <div className="bg-white/10 backdrop-blur-sm rounded-lg p-3 flex items-center gap-2">
+              <input
+                type="range"
+                min="0"
+                max="100"
+                value={volume * 100}
+                onChange={(e) => setVolume(parseInt(e.target.value) / 100)}
+                className="w-24 h-2 bg-gray-300 rounded-lg appearance-none cursor-pointer accent-green-500"
+              />
+              <span className="text-white text-sm font-mono w-8">
+                {Math.round(volume * 100)}%
+              </span>
+            </div>
+          )}
+          <Button
+            onClick={() => setShowVolumeSlider(!showVolumeSlider)}
+            size="sm"
+            variant="secondary"
+            className="bg-white/10 backdrop-blur-sm hover:bg-white/20 border border-white/30"
+          >
+            {volume === 0 ? '🔇' : volume < 0.5 ? '🔉' : '🔊'}
+          </Button>
+        </div>
+
         <GamePhaseView 
           gameState={gameState}
           currentPlayerId={currentPlayerId}
