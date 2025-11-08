@@ -391,9 +391,26 @@ export default function GameLobbyClient({ code }: { code: string }) {
           ...p,
           totalCards: p.cards.length // Count cards in hand, not collected cards
         }));
-        const busDriver = playerCardCounts.reduce((max, p) => 
-          p.totalCards > max.totalCards ? p : max
-        );
+        
+        // Find max card count
+        const maxCards = Math.max(...playerCardCounts.map(p => p.totalCards));
+        
+        // Get all players with max cards (could be multiple if tied)
+        const playersWithMaxCards = playerCardCounts.filter(p => p.totalCards === maxCards);
+        
+        // Randomly select bus driver from players with max cards
+        const busDriver = playersWithMaxCards[Math.floor(Math.random() * playersWithMaxCards.length)];
+        
+        // Determine first partner (player with second most cards, excluding bus driver)
+        const otherPlayers = playerCardCounts.filter(p => p.id !== busDriver.id);
+        const secondMaxCards = Math.max(...otherPlayers.map(p => p.totalCards));
+        const playersWithSecondMostCards = otherPlayers.filter(p => p.totalCards === secondMaxCards);
+        
+        // Randomly select first partner from players with second most cards
+        const firstPartner = playersWithSecondMostCards[Math.floor(Math.random() * playersWithSecondMostCards.length)];
+        
+        // Find the index of the first partner in the otherPlayers array
+        const firstPartnerIndex = otherPlayers.findIndex(p => p.id === firstPartner.id);
 
         // Collect ALL cards from the deck array (both drawn and undrawn)
         // The deck array contains all 104 cards (for 5 players), with some marked as drawn
@@ -408,6 +425,7 @@ export default function GameLobbyClient({ code }: { code: string }) {
         
         console.log(`Round 3 starting with ${shuffledCards.length} cards in deck (all from deck array)`);
         console.log('All cards marked as undrawn:', shuffledCards.filter(c => !c.drawn).length);
+        console.log(`Bus driver: ${busDriver.name} (${busDriver.totalCards} cards), First partner: ${firstPartner.name} (${firstPartner.totalCards} cards)`);
         
         setDeck(shuffledCards);
 
@@ -422,7 +440,7 @@ export default function GameLobbyClient({ code }: { code: string }) {
           players: playersWithoutCards,
           phase: 'round3_busdriver',
           busDriverId: busDriver.id,
-          busDriverPartnerIndex: 0,
+          busDriverPartnerIndex: firstPartnerIndex,
           busDriverCards: [],
           busDriverCorrectGuesses: 0
         };
@@ -1446,7 +1464,7 @@ function Round3View({
           <p className="text-white/70 text-xs mb-3">
             Correct: Give 2 drinks | Wrong: Drink once
           </p>
-          {currentPlayerId === gameState.players[0]?.id ? (
+          {isBusDriver ? (
             <div className="grid grid-cols-2 gap-2">
               <Button onClick={() => onGuessSuit('hearts')} size="sm" className="bg-red-600 text-white text-xs py-1">
                 ♥ Hearts
@@ -1462,7 +1480,7 @@ function Round3View({
               </Button>
             </div>
           ) : (
-            <p className="text-yellow-400 text-sm">Waiting for host to guess...</p>
+            <p className="text-yellow-400 text-sm">Waiting for {busDriver?.name} to guess...</p>
           )}
         </div>
       )}
