@@ -138,8 +138,8 @@ export async function POST(
       );
     }
 
-    // Create deck(s) based on player count
-    const numDecks = players.length >= 5 ? 2 : 1;
+    // Create deck(s) based on player count (1 deck for up to 6 players, 2 decks for 7+)
+    const numDecks = players.length > 6 ? 2 : 1;
     let combinedDeck: Card[] = [];
     for (let i = 0; i < numDecks; i++) {
       combinedDeck = [...combinedDeck, ...createShuffledDeck()];

@@ -999,14 +999,12 @@ function Round1View({
   return (
     <div className="flex flex-col items-center justify-between h-full py-2 relative">
       {/* Deck indicator in top left */}
-      <div className="absolute top-2 left-2">
-        <div className="relative transform scale-50 origin-top-left">
+      <div className="absolute top-2 left-2 flex items-center gap-2">
+        <div className="transform scale-50 origin-top-left">
           <CardBack />
-          <div className="absolute inset-0 flex items-center justify-center">
-            <div className="bg-black/80 text-white font-bold text-2xl px-4 py-2 rounded border-2 border-white">
-              {deckCardsRemaining}
-            </div>
-          </div>
+        </div>
+        <div className="bg-black/80 text-white font-bold text-xl px-3 py-1 rounded border-2 border-white">
+          {deckCardsRemaining}
         </div>
       </div>
 
@@ -1181,14 +1179,12 @@ function Round2View({
   return (
     <div className="flex flex-col items-center justify-between h-full py-2 relative">
       {/* Deck indicator in top left */}
-      <div className="absolute top-2 left-2">
-        <div className="relative transform scale-50 origin-top-left">
+      <div className="absolute top-2 left-2 flex items-center gap-2">
+        <div className="transform scale-50 origin-top-left">
           <CardBack />
-          <div className="absolute inset-0 flex items-center justify-center">
-            <div className="bg-black/80 text-white font-bold text-2xl px-4 py-2 rounded border-2 border-white">
-              {deckCardsRemaining}
-            </div>
-          </div>
+        </div>
+        <div className="bg-black/80 text-white font-bold text-xl px-3 py-1 rounded border-2 border-white">
+          {deckCardsRemaining}
         </div>
       </div>
 
@@ -1500,14 +1496,12 @@ function Round3View({
   return (
     <div className="flex flex-col items-center justify-between h-full py-2 relative">
       {/* Deck indicator in top left */}
-      <div className="absolute top-2 left-2">
-        <div className="relative transform scale-50 origin-top-left">
+      <div className="absolute top-2 left-2 flex items-center gap-2">
+        <div className="transform scale-50 origin-top-left">
           <CardBack />
-          <div className="absolute inset-0 flex items-center justify-center">
-            <div className="bg-black/80 text-white font-bold text-2xl px-4 py-2 rounded border-2 border-white">
-              {deckCardsRemaining}
-            </div>
-          </div>
+        </div>
+        <div className="bg-black/80 text-white font-bold text-xl px-3 py-1 rounded border-2 border-white">
+          {deckCardsRemaining}
         </div>
       </div>
 
