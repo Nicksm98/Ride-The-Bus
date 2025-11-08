@@ -438,10 +438,25 @@ export default function GameLobbyClient({ code }: { code: string }) {
       const cycle: ('good' | 'bad' | 'ugly')[] = ['good', 'bad', 'ugly'];
       const currentAction = cycle[gameState.round2Index % 3];
 
+      // Calculate original match counts for this drawn card
+      const originalMatches: Record<string, number> = {};
+      gameState.players.forEach(p => {
+        const matchCount = p.cards.filter(pc => pc.card.rank === drawnCard.rank).length;
+        if (matchCount > 0) {
+          originalMatches[p.id] = matchCount;
+        }
+      });
+
+      // Find first player with matches to be the current giver (for good/ugly, not bad)
+      const firstPlayerWithMatch = gameState.players.find(p => originalMatches[p.id] > 0);
+
       const newState = {
         ...gameState,
         round2CardDrawn: drawnCard,
-        round2Index: gameState.round2Index + 1
+        round2Index: gameState.round2Index + 1,
+        round2OriginalMatches: originalMatches,
+        round2GivenCounts: {},
+        round2CurrentGiver: (currentAction !== 'bad' && firstPlayerWithMatch) ? firstPlayerWithMatch.id : null
       };
       setGameState(newState);
       syncGameState(newState, updatedDeck);
@@ -460,9 +475,29 @@ export default function GameLobbyClient({ code }: { code: string }) {
     // Good cards: player chooses who drinks, NO card modifications
     if (currentAction === 'good' && toPlayerId) {
       console.log('[Round 2] Good card - syncing state');
+      
+      // Update given count for this player
+      const newGivenCounts = { ...(gameState.round2GivenCounts || {}) };
+      newGivenCounts[fromPlayerId] = (newGivenCounts[fromPlayerId] || 0) + 1;
+      
+      // Find next player who needs to give, or null if all done
+      const originalMatches = gameState.round2OriginalMatches || {};
+      const nextGiver = gameState.players.find(p => 
+        (originalMatches[p.id] || 0) > 0 && 
+        (newGivenCounts[p.id] || 0) < originalMatches[p.id]
+      );
+      
       const newState = {
         ...gameState,
-        round2CardDrawn: shouldClearCard ? null : gameState.round2CardDrawn
+        round2CardDrawn: shouldClearCard ? null : gameState.round2CardDrawn,
+        round2GivenCounts: newGivenCounts,
+        round2CurrentGiver: nextGiver ? nextGiver.id : null,
+        // Clear tracking when card is cleared
+        ...(shouldClearCard ? {
+          round2OriginalMatches: {},
+          round2GivenCounts: {},
+          round2CurrentGiver: null
+        } : {})
       };
       setGameState(newState);
       syncGameState(newState);
@@ -473,7 +508,10 @@ export default function GameLobbyClient({ code }: { code: string }) {
     if (currentAction === 'bad') {
       const newState = {
         ...gameState,
-        round2CardDrawn: null
+        round2CardDrawn: null,
+        round2OriginalMatches: {},
+        round2GivenCounts: {},
+        round2CurrentGiver: null
       };
       setGameState(newState);
       syncGameState(newState);
@@ -524,10 +562,29 @@ export default function GameLobbyClient({ code }: { code: string }) {
         return p;
       });
 
+      // Update given count for this player
+      const newGivenCounts = { ...(gameState.round2GivenCounts || {}) };
+      newGivenCounts[fromPlayerId] = (newGivenCounts[fromPlayerId] || 0) + 1;
+      
+      // Find next player who needs to give, or null if all done
+      const originalMatches = gameState.round2OriginalMatches || {};
+      const nextGiver = gameState.players.find(p => 
+        (originalMatches[p.id] || 0) > 0 && 
+        (newGivenCounts[p.id] || 0) < originalMatches[p.id]
+      );
+
       const newState = {
         ...gameState,
         players: updatedPlayers,
-        round2CardDrawn: shouldClearCard ? null : gameState.round2CardDrawn
+        round2CardDrawn: shouldClearCard ? null : gameState.round2CardDrawn,
+        round2GivenCounts: newGivenCounts,
+        round2CurrentGiver: nextGiver ? nextGiver.id : null,
+        // Clear tracking when card is cleared
+        ...(shouldClearCard ? {
+          round2OriginalMatches: {},
+          round2GivenCounts: {},
+          round2CurrentGiver: null
+        } : {})
       };
       setGameState(newState);
       syncGameState(newState);
@@ -959,15 +1016,6 @@ function Round2View({
   onSelectPlayer: (fromPlayerId: string, toPlayerId?: string, shouldClearCard?: boolean) => void;
   deckCardsRemaining: number;
 }) {
-  const [uglyCardFromPlayer, setUglyCardFromPlayer] = React.useState<string | null>(null);
-  // Track how many cards each player has given (Map of playerId -> count)
-  const [uglyCardsGivenCount, setUglyCardsGivenCount] = React.useState<Map<string, number>>(new Map());
-  const [goodCardFromPlayer, setGoodCardFromPlayer] = React.useState<string | null>(null);
-  // Track how many drinks each player has given out (Map of playerId -> count)
-  const [goodCardsGivenCount, setGoodCardsGivenCount] = React.useState<Map<string, number>>(new Map());
-  // Track the original hand state when the card was drawn (to know who ORIGINALLY had matches)
-  const [originalHandsWhenDrawn, setOriginalHandsWhenDrawn] = React.useState<Map<string, number>>(new Map());
-  
   const cycle: ('good' | 'bad' | 'ugly')[] = ['good', 'bad', 'ugly'];
   // If card is drawn, use the action from when it was drawn (index - 1)
   // If no card drawn, show the NEXT action that will happen
@@ -977,7 +1025,12 @@ function Round2View({
   
   // Helper function to count how many matching cards a player ORIGINALLY had when card was drawn
   const getOriginalMatchCount = (playerId: string) => {
-    return originalHandsWhenDrawn.get(playerId) || 0;
+    return (gameState.round2OriginalMatches || {})[playerId] || 0;
+  };
+  
+  // Helper function to get how many cards/drinks a player has given
+  const getGivenCount = (playerId: string) => {
+    return (gameState.round2GivenCounts || {})[playerId] || 0;
   };
   
   // Helper function to count how many matching cards a player CURRENTLY has
@@ -996,58 +1049,14 @@ function Round2View({
   
   // Check if all cards/drinks have been given out (each player has given as many as they ORIGINALLY had)
   const allUglyCardsGiven = playersWithUglyMatch.every(p => 
-    (uglyCardsGivenCount.get(p.id) || 0) >= getOriginalMatchCount(p.id)
+    getGivenCount(p.id) >= getOriginalMatchCount(p.id)
   );
   const allGoodCardsGiven = playersWithGoodMatch.every(p => 
-    (goodCardsGivenCount.get(p.id) || 0) >= getOriginalMatchCount(p.id)
+    getGivenCount(p.id) >= getOriginalMatchCount(p.id)
   );
   
-  // Automatically set the current player who needs to act
-  React.useEffect(() => {
-    if (gameState.round2CardDrawn) {
-      if (currentAction === 'ugly') {
-        // Find first player who hasn't given all their cards yet
-        const firstUnprocessedPlayer = playersWithUglyMatch.find(p => 
-          (uglyCardsGivenCount.get(p.id) || 0) < getOriginalMatchCount(p.id)
-        );
-        if (firstUnprocessedPlayer && !uglyCardFromPlayer) {
-          setUglyCardFromPlayer(firstUnprocessedPlayer.id);
-        }
-      } else if (currentAction === 'good') {
-        // Find first player who hasn't given all their drinks yet
-        const firstUnprocessedPlayer = playersWithGoodMatch.find(p => 
-          (goodCardsGivenCount.get(p.id) || 0) < getOriginalMatchCount(p.id)
-        );
-        if (firstUnprocessedPlayer && !goodCardFromPlayer) {
-          setGoodCardFromPlayer(firstUnprocessedPlayer.id);
-        }
-      }
-    }
-  }, [gameState.round2CardDrawn, currentAction, playersWithUglyMatch, playersWithGoodMatch, uglyCardsGivenCount, goodCardsGivenCount, uglyCardFromPlayer, goodCardFromPlayer]);
-  
-  // Save original hand state and reset tracking when new card is drawn
-  React.useEffect(() => {
-    if (gameState.round2CardDrawn) {
-      // Card was just drawn - save the original match counts
-      if (originalHandsWhenDrawn.size === 0) {
-        const newOriginalHands = new Map<string, number>();
-        gameState.players.forEach(p => {
-          const matchCount = p.cards.filter(pc => pc.card.rank === gameState.round2CardDrawn!.rank).length;
-          if (matchCount > 0) {
-            newOriginalHands.set(p.id, matchCount);
-          }
-        });
-        setOriginalHandsWhenDrawn(newOriginalHands);
-      }
-    } else {
-      // Card cleared - reset everything
-      setUglyCardsGivenCount(new Map());
-      setUglyCardFromPlayer(null);
-      setGoodCardsGivenCount(new Map());
-      setGoodCardFromPlayer(null);
-      setOriginalHandsWhenDrawn(new Map());
-    }
-  }, [gameState.round2CardDrawn]);
+  // Get current giver from synced state
+  const currentGiver = gameState.round2CurrentGiver;
   
   const actionColors = {
     good: 'text-green-400',
@@ -1097,7 +1106,7 @@ function Round2View({
           )}
 
           {/* Continue button when no matches OR when all cards given - only host can continue */}
-          {gameState.round2CardDrawn && !uglyCardFromPlayer && !goodCardFromPlayer && (
+          {gameState.round2CardDrawn && !currentGiver && (
             (
               !gameState.players.some(p => 
                 p.cards.some(pc => pc.card.rank === gameState.round2CardDrawn!.rank)
@@ -1109,13 +1118,13 @@ function Round2View({
                 <Button onClick={onDrawCard} size="sm" className="mb-2">
                   {currentAction === 'ugly' && playersWithUglyMatch.length > 0 ? 
                      (() => {
-                       const totalGiven = Array.from(uglyCardsGivenCount.values()).reduce((sum, count) => sum + count, 0);
+                       const totalGiven = Object.values(gameState.round2GivenCounts || {}).reduce((sum, count) => sum + count, 0);
                        const totalNeeded = playersWithUglyMatch.reduce((sum, p) => sum + getOriginalMatchCount(p.id), 0);
                        return `Draw Next Card (${totalGiven}/${totalNeeded} given)`;
                      })() :
                    currentAction === 'good' && playersWithGoodMatch.length > 0 ? 
                      (() => {
-                       const totalGiven = Array.from(goodCardsGivenCount.values()).reduce((sum, count) => sum + count, 0);
+                       const totalGiven = Object.values(gameState.round2GivenCounts || {}).reduce((sum, count) => sum + count, 0);
                        const totalNeeded = playersWithGoodMatch.reduce((sum, p) => sum + getOriginalMatchCount(p.id), 0);
                        return `Draw Next Card (${totalGiven}/${totalNeeded} given)`;
                      })() :
@@ -1149,16 +1158,16 @@ function Round2View({
         )}
 
         {/* Show message when selecting Ugly card recipient */}
-        {uglyCardFromPlayer && currentAction === 'ugly' && (
+        {currentGiver && currentAction === 'ugly' && (
           <div className="text-white text-lg ml-4">
-            {gameState.players.find(p => p.id === uglyCardFromPlayer)?.name} - Select who receives your card
+            {gameState.players.find(p => p.id === currentGiver)?.name} - Select who receives your card
           </div>
         )}
 
         {/* Show message when selecting Good card recipient */}
-        {goodCardFromPlayer && currentAction === 'good' && (
+        {currentGiver && currentAction === 'good' && (
           <div className="text-white text-lg ml-4">
-            {gameState.players.find(p => p.id === goodCardFromPlayer)?.name} - Select who takes a drink
+            {gameState.players.find(p => p.id === currentGiver)?.name} - Select who takes a drink
           </div>
         )}
       </div>
@@ -1198,17 +1207,17 @@ function Round2View({
               {getOriginalMatchCount(player.id) > 0 && gameState.round2CardDrawn && currentAction !== 'bad' && (
                 (() => {
                   const originalMatchCount = getOriginalMatchCount(player.id);
+                  const givenCount = getGivenCount(player.id);
                   
                   // For ugly cards
                   if (currentAction === 'ugly') {
-                    const givenCount = uglyCardsGivenCount.get(player.id) || 0;
                     if (givenCount >= originalMatchCount) {
                       return (
                         <div className="mt-1 text-green-400 text-xs font-bold text-center">
                           ✓ {originalMatchCount === 1 ? 'Card Given' : `All ${originalMatchCount} Cards Given`}
                         </div>
                       );
-                    } else if (player.id === uglyCardFromPlayer) {
+                    } else if (player.id === currentGiver) {
                       const remaining = originalMatchCount - givenCount;
                       return (
                         <div className="mt-1 text-yellow-400 text-xs text-center font-bold">
@@ -1228,14 +1237,13 @@ function Round2View({
                   
                   // For good cards
                   if (currentAction === 'good') {
-                    const givenCount = goodCardsGivenCount.get(player.id) || 0;
                     if (givenCount >= originalMatchCount) {
                       return (
                         <div className="mt-1 text-green-400 text-xs font-bold text-center">
                           ✓ {originalMatchCount === 1 ? 'Drink Given' : `All ${originalMatchCount} Drinks Given`}
                         </div>
                       );
-                    } else if (player.id === goodCardFromPlayer) {
+                    } else if (player.id === currentGiver) {
                       const remaining = originalMatchCount - givenCount;
                       return (
                         <div className="mt-1 text-yellow-400 text-xs text-center font-bold">
@@ -1270,29 +1278,21 @@ function Round2View({
               )}
 
               {/* Good: Select who drinks - only show to the player who is giving */}
-              {goodCardFromPlayer && currentAction === 'good' && player.id !== goodCardFromPlayer && goodCardFromPlayer === currentPlayerId && (
+              {currentGiver && currentAction === 'good' && player.id !== currentGiver && currentGiver === currentPlayerId && (
                 <Button 
                   onClick={() => {
-                    const currentCount = goodCardsGivenCount.get(goodCardFromPlayer) || 0;
+                    // Calculate if this will be the complete action
+                    const currentCount = getGivenCount(currentGiver);
                     const newCount = currentCount + 1;
-                    const newGoodCardsGivenCount = new Map(goodCardsGivenCount);
-                    newGoodCardsGivenCount.set(goodCardFromPlayer, newCount);
-                    
-                    const originalMatchCount = getOriginalMatchCount(goodCardFromPlayer);
-                    const playerStillHasMore = newCount < originalMatchCount;
+                    const originalMatchCount = getOriginalMatchCount(currentGiver);
                     
                     // Check if ALL players are done
-                    const willBeComplete = playersWithGoodMatch.every(p => 
-                      (p.id === goodCardFromPlayer ? newCount : (goodCardsGivenCount.get(p.id) || 0)) >= getOriginalMatchCount(p.id)
-                    );
+                    const willBeComplete = playersWithGoodMatch.every(p => {
+                      const given = p.id === currentGiver ? newCount : getGivenCount(p.id);
+                      return given >= getOriginalMatchCount(p.id);
+                    });
                     
-                    onSelectPlayer(goodCardFromPlayer, player.id, willBeComplete);
-                    setGoodCardsGivenCount(newGoodCardsGivenCount);
-                    
-                    // If this player still has more to give, keep them active, otherwise clear
-                    if (!playerStillHasMore) {
-                      setGoodCardFromPlayer(null);
-                    }
+                    onSelectPlayer(currentGiver, player.id, willBeComplete);
                   }}
                   size="sm"
                   className="mt-1 w-full text-xs py-1"
@@ -1303,29 +1303,21 @@ function Round2View({
               )}
 
               {/* Ugly: Select who receives card - only show to the player who is giving */}
-              {uglyCardFromPlayer && currentAction === 'ugly' && player.id !== uglyCardFromPlayer && uglyCardFromPlayer === currentPlayerId && (
+              {currentGiver && currentAction === 'ugly' && player.id !== currentGiver && currentGiver === currentPlayerId && (
                 <Button 
                   onClick={() => {
-                    const currentCount = uglyCardsGivenCount.get(uglyCardFromPlayer) || 0;
+                    // Calculate if this will be the complete action
+                    const currentCount = getGivenCount(currentGiver);
                     const newCount = currentCount + 1;
-                    const newUglyCardsGivenCount = new Map(uglyCardsGivenCount);
-                    newUglyCardsGivenCount.set(uglyCardFromPlayer, newCount);
-                    
-                    const originalMatchCount = getOriginalMatchCount(uglyCardFromPlayer);
-                    const playerStillHasMore = newCount < originalMatchCount;
+                    const originalMatchCount = getOriginalMatchCount(currentGiver);
                     
                     // Check if ALL players are done
-                    const willBeComplete = playersWithUglyMatch.every(p => 
-                      (p.id === uglyCardFromPlayer ? newCount : (uglyCardsGivenCount.get(p.id) || 0)) >= getOriginalMatchCount(p.id)
-                    );
+                    const willBeComplete = playersWithUglyMatch.every(p => {
+                      const given = p.id === currentGiver ? newCount : getGivenCount(p.id);
+                      return given >= getOriginalMatchCount(p.id);
+                    });
                     
-                    onSelectPlayer(uglyCardFromPlayer, player.id, willBeComplete);
-                    setUglyCardsGivenCount(newUglyCardsGivenCount);
-                    
-                    // If this player still has more to give, keep them active, otherwise clear
-                    if (!playerStillHasMore) {
-                      setUglyCardFromPlayer(null);
-                    }
+                    onSelectPlayer(currentGiver, player.id, willBeComplete);
                   }}
                   size="sm"
                   className="mt-1 w-full text-xs py-1"

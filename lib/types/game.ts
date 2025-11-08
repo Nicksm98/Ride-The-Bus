@@ -47,6 +47,9 @@ export type GameState = {
   // Round 2 state
   round2Index: number;          // Current position in good/bad/ugly cycle
   round2CardDrawn: Card | null; // Current card being matched
+  round2OriginalMatches?: Record<string, number>; // Track original match counts per player
+  round2GivenCounts?: Record<string, number>; // Track how many each player has given
+  round2CurrentGiver?: string | null; // Current player giving cards/drinks
   
   // Round 3 state
   busDriverId: string | null;   // Player with most cards
