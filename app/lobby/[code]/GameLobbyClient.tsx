@@ -459,6 +459,7 @@ export default function GameLobbyClient({ code }: { code: string }) {
     
     // Good cards: player chooses who drinks, NO card modifications
     if (currentAction === 'good' && toPlayerId) {
+      console.log('[Round 2] Good card - syncing state');
       const newState = {
         ...gameState,
         round2CardDrawn: shouldClearCard ? null : gameState.round2CardDrawn
