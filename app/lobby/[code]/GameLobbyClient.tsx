@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState, useCallback } from "react";
+import React, { useEffect, useState, useCallback, useRef } from "react";
 import { supabase } from "@/lib/supabase/client";
 import { useSearchParams } from "next/navigation";
 import { PlayingCard, CardBack } from "@/components/ui/playing-card";
@@ -23,6 +23,14 @@ export default function GameLobbyClient({ code }: { code: string }) {
   const [loading, setLoading] = useState(true);
   const [showDrinkPrompt, setShowDrinkPrompt] = useState(false);
   const [deck, setDeck] = useState<Card[]>([]);
+  
+  // Use ref to track latest game state for polling comparison
+  const gameStateRef = useRef<GameState | null>(null);
+  
+  // Update ref whenever gameState changes
+  useEffect(() => {
+    gameStateRef.current = gameState;
+  }, [gameState]);
 
   // Helper function to sync game state to database
   const syncGameState = async (newGameState: GameState, newDeck?: Card[]) => {
@@ -90,11 +98,12 @@ export default function GameLobbyClient({ code }: { code: string }) {
         if (error) {
           console.error('Polling error:', error);
         } else if (data && mounted) {
-          console.log(`[${new Date().toLocaleTimeString()}] Poll - phase: ${data.game_state?.phase || 'none'}`);
+          // Use ref to get latest game state for comparison
+          const currentGameState = gameStateRef.current;
           
           // Update if game state changed
-          if (JSON.stringify(data.game_state) !== JSON.stringify(gameState)) {
-            console.log('Game state changed! Updating...');
+          if (JSON.stringify(data.game_state) !== JSON.stringify(currentGameState)) {
+            console.log(`[${new Date().toLocaleTimeString()}] Game state changed! Updating...`);
             setPlayers(data.players || []);
             if (data.game_state) {
               setGameState(data.game_state);
@@ -136,7 +145,7 @@ export default function GameLobbyClient({ code }: { code: string }) {
       clearInterval(pollInterval);
       supabase.removeChannel(channel);
     };
-  }, [code, gameState]);
+  }, [code]); // Removed gameState from dependencies to prevent infinite re-subscriptions
 
   // Create a shuffled deck
   const createShuffledDeck = (): Card[] => {
